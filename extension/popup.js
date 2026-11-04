@@ -4,9 +4,11 @@ const els = {
   status: document.getElementById('status'),
   open: document.getElementById('open'),
   stop: document.getElementById('stop'),
+  reset: document.getElementById('reset'),
   workspace: document.getElementById('workspace'),
   port: document.getElementById('port'),
   details: document.getElementById('details'),
+  detailsPane: document.getElementById('details-pane'),
   error: document.getElementById('error'),
 };
 
@@ -35,6 +37,7 @@ function render() {
   els.stop.disabled = !running && !starting;
 
   els.details.replaceChildren();
+  els.detailsPane.hidden = !running;
   if (!running) return;
   for (const [key, value] of Object.entries({
     url: state.cleanUrl,
@@ -105,6 +108,12 @@ els.open.addEventListener('click', async () => {
   } finally {
     busy(false);
   }
+});
+
+els.reset.addEventListener('click', () => {
+  els.workspace.value = '';
+  els.port.value = '';
+  els.workspace.focus();
 });
 
 els.stop.addEventListener('click', async () => {

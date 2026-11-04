@@ -6,7 +6,11 @@
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <h1>DSH Web</h1>
+    <header class="head">
+      <img class="logo" src="icons/icon-32.png" alt="" width="18" height="18" />
+      <h1>DSH Web</h1>
+    </header>
+
     <p id="status" class="status">checking…</p>
 
     <div class="row">
@@ -14,22 +18,36 @@
       <button id="stop">Stop</button>
     </div>
 
-    <details>
-      <summary>Options</summary>
-      <label>
-        Workspace
-        <input id="workspace" type="text" placeholder="~ (default)" spellcheck="false" />
-      </label>
-      <label>
-        Port
-        <input id="port" type="number" min="1" max="65535" placeholder="3080" />
-      </label>
-      <p class="hint">Workspace is the agent's working directory; blank means your home directory.</p>
+    <details class="pane">
+      <summary><span class="chev" aria-hidden="true"></span>Settings</summary>
+      <div class="pane-body">
+        <label class="field">
+          <span class="field-label">Workspace</span>
+          <input
+            id="workspace"
+            type="text"
+            placeholder="~ (home directory)"
+            spellcheck="false"
+            autocomplete="off"
+          />
+          <span class="field-hint">Working directory the agent starts in.</span>
+        </label>
+        <label class="field">
+          <span class="field-label">Port</span>
+          <input id="port" type="number" min="1" max="65535" placeholder="3080" inputmode="numeric" />
+          <span class="field-hint">Loopback port the web UI binds to. Default 3080.</span>
+        </label>
+        <div class="pane-actions">
+          <button id="reset" class="ghost" type="button">Reset to defaults</button>
+        </div>
+      </div>
     </details>
 
-    <details>
-      <summary>Details</summary>
-      <dl id="details"></dl>
+    <details id="details-pane" class="pane" hidden>
+      <summary><span class="chev" aria-hidden="true"></span>Details</summary>
+      <div class="pane-body">
+        <dl id="details" class="kv"></dl>
+      </div>
     </details>
 
     <p id="error" class="error" hidden></p>
