@@ -1,4 +1,4 @@
-# dsh web launcher (Chrome extension)
+# DSH Web (Chrome extension)
 
 One toolbar click starts `npx @deepseek-ai/dsh web --no-open` and opens the resulting
 tokenized URL as a tab in the Chrome you are already using.

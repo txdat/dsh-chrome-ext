@@ -52,6 +52,12 @@ button.primary {
   color: #fff;
 }
 
+#stop {
+  border-color: #d92d20;
+  background: #fef3f2;
+  color: #b42318;
+}
+
 button:disabled {
   cursor: progress;
   opacity: 0.6;

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "dsh web launcher",
+  "name": "DSH Web",
   "version": "0.1.0",
   "description": "Starts `npx @deepseek-ai/dsh web --no-open` through a native host and opens the tokenized URL in this Chrome.",
   "minimum_chrome_version": "116",
@@ -20,7 +20,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "dsh web",
+    "default_title": "DSH Web",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
