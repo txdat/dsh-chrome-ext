@@ -5,7 +5,9 @@
   "description": "Chrome extension that starts `npx @deepseek-ai/dsh web --no-open` through a native messaging host and opens the tokenized URL in the current Chrome.",
   "type": "module",
   "scripts": {
+    "test": "node --test",
     "gen-key": "node scripts/gen-key.mjs --write",
+    "rotate-key": "node scripts/gen-key.mjs --write --force",
     "install-host": "node scripts/install-host.mjs",
     "setup": "npm run gen-key && npm run install-host"
   }

@@ -35,7 +35,8 @@ Two consequences worth knowing before you change anything:
 ## Install
 
 ```sh
-npm run setup          # pin the extension ID, register the native host
+npm run setup          # register the native host (gen-key is a no-op when a key is pinned)
+npm test               # offline protocol/lifecycle tests, no Chrome needed
 ```
 
 Then in Chrome: `chrome://extensions` → enable *Developer mode* → *Load unpacked* →
@@ -56,9 +57,10 @@ are in `~/.local/state/dsh-chrome-ext/logs/` and `host.log` next to it.
 | `extension/background.js` | badge sync only (the popup owns the lifecycle) |
 | `native/host.sh` | the executable Chrome launches; resolves `node` and `npx` |
 | `native/host.mjs` | native-messaging protocol, process supervision, state file |
-| `scripts/gen-key.mjs` | generates the pinning key (`--write` stores it) |
+| `scripts/gen-key.mjs` | generates the pinning key (`--write` stores it, `--force` rotates) |
 | `scripts/install-host.mjs` | writes the host manifest into every browser config dir |
 | `scripts/id.mjs` | extension ID = first 16 bytes of SHA-256 over the DER key, nibbles → `a`-`p` |
+| `test/host.test.mjs` | native host protocol and lifecycle, driven by a stub launcher |
 
 State lives outside the repo: `~/.local/state/dsh-chrome-ext/` (`state.json` mode 0600,
 `logs/`, `host.log`).
@@ -107,25 +109,36 @@ child gets `dirname(node)` prepended to `PATH` so the `npx` shebang resolves.
 
 ## Verified
 
-Run on this machine, `env -i PATH=/usr/bin:/bin` (no node on PATH), isolated
+`npm test` covers the host contract without Chrome, network, or a dsh install: it points
+`DSH_EXT_LAUNCH` at a stub launcher that prints the readiness line on an ephemeral port.
+
+| Test | Asserts |
+|---|---|
+| start with stdin left open | reply does not wait for EOF; URL, clean URL, and port parsed |
+| shell wrapper | `host.sh` resolves node/npx and speaks the same protocol |
+| second start | reuses the live pid, writes no second log |
+| stop | process group gone, state cleared |
+| host killed mid-launch | state stays `launching`, `status` reports `starting`, next `start` resumes the same pid |
+| stop with a foreign pid | refuses, warns, the pid survives, stale state cleared |
+| launcher exits without a URL | `ok:false` with the `EADDRINUSE` output attached |
+| unknown request | rejected |
+
+Run by hand on this machine, `env -i PATH=/usr/bin:/bin` (no node on PATH), isolated
 `DSH_HOME`:
 
 | Check | Result |
 |---|---|
 | node resolution with a Chrome-like PATH | `zsh -ic` lookup found the fnm node |
-| real `npx @deepseek-ai/dsh web --no-open --port 3097` | ready in ~5 s, URL line captured, `launchId` present through the `npx`→`npm exec` hand-off |
+| real `npx @deepseek-ai/dsh web --no-open --port 3097` | ready in ~5 s, `launchId` present through the `npx`→`npm exec` hand-off |
 | token URL over plain HTTP | `303` + `Set-Cookie`; clean URL alone `401`; token reusable |
-| host exits after reply | dsh keeps running (reparented), port stays open |
-| reply with stdin left open | host answers without waiting for EOF |
-| host killed mid-launch | state stays `launching`; `status` reports `starting`; next `start` resumes the same pid, no second spawn |
-| `stop` | process group killed, port closed, state cleared |
-| stale state + unrelated pid | `status` clears it, `stop` refuses and warns, the pid survives |
-| port 3080 already in use | `ok:false` with the `EADDRINUSE` startup report in `output` |
+| `google-chrome --pack-extension` | packs the extension (valid manifest, loads) |
+| popup with stubbed `chrome.*` over HTTP | running state, details pane, and the failed-start state all render as coded |
+| port 3080 already in use | `ok:false` with the real `EADDRINUSE` startup report |
 
-Not verified here: the Chrome side (host registration is written and the ID is pinned,
-but loading the unpacked extension and clicking the popup needs a human in the browser),
-and macOS/Windows registration. Chrome 156 also ignores `--load-extension`, so the
-extension could not be driven headlessly.
+Not verified here: clicking through the popup inside a real Chrome extension context
+(the host registration is written and the ID is pinned, but that last step needs a human
+in the browser). Chrome 156 ignores `--load-extension`, so it cannot be driven headlessly.
+macOS and Windows host registration are not implemented.
 
 ## Limits and caveats
 
