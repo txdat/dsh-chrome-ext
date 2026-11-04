@@ -45,7 +45,8 @@ const STATE_DIR =
   process.env.DSH_EXT_STATE_DIR ??
   path.join(process.env.XDG_STATE_HOME ?? path.join(os.homedir(), '.local', 'state'), 'dsh-chrome-ext');
 const STATE_FILE = path.join(STATE_DIR, 'state.json');
-const LOG_DIR = path.join(STATE_DIR, 'logs');
+/** Per-launch dsh output goes to /tmp: it must outlive the host (resume), not a reboot. */
+const LOG_DIR = process.env.DSH_EXT_LOG_DIR ?? path.join(os.tmpdir(), 'dsh-chrome-ext', 'logs');
 const HOST_LOG = path.join(STATE_DIR, 'host.log');
 
 const NODE_BIN = process.env.DSH_EXT_NODE ?? process.execPath;

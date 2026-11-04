@@ -16,7 +16,7 @@ toolbar click
                                           │ resolves node (PATH → login shell → known dirs)
                                           └─ node native/host.mjs
                                                └─ npx --yes @deepseek-ai/dsh web --no-open --port 3080
-                                                    │ stdout → ~/.local/state/dsh-chrome-ext/logs/*.log
+                                                    │ stdout → /tmp/dsh-chrome-ext/logs/*.log
                                                     └─ "dsh web: http://127.0.0.1:3080/?token=…"
                         ◄── framed JSON { ok, url, cleanUrl, pid, port } ──┘
    └─ chrome.tabs.create({ url })   ← the "current Chrome" part
@@ -45,7 +45,8 @@ select `extension/`. The ID shown must equal the one `npm run setup` printed
 
 Open the toolbar popup, optionally set a workspace and port, click **Start and open**.
 First run downloads the CLI (a few minutes, cached afterwards). Progress and failures
-are in `~/.local/state/dsh-chrome-ext/logs/` and `host.log` next to it.
+are in `/tmp/dsh-chrome-ext/logs/dsh-<stamp>-<pid>.log`; host diagnostics are in
+`~/.local/state/dsh-chrome-ext/host.log`.
 
 ## Layout
 
@@ -62,8 +63,10 @@ are in `~/.local/state/dsh-chrome-ext/logs/` and `host.log` next to it.
 | `scripts/id.mjs` | extension ID = first 16 bytes of SHA-256 over the DER key, nibbles → `a`-`p` |
 | `test/host.test.mjs` | native host protocol and lifecycle, driven by a stub launcher |
 
-State lives outside the repo: `~/.local/state/dsh-chrome-ext/` (`state.json` mode 0600,
-`logs/`, `host.log`).
+State and host diagnostics live outside the repo in `~/.local/state/dsh-chrome-ext/`
+(`state.json` mode 0600, `host.log`). The dsh console output of each launch goes to
+`$TMPDIR/dsh-chrome-ext/logs` (`/tmp/…` by default), so it survives a host restart but
+not a reboot; override that dir with `DSH_EXT_LOG_DIR`.
 
 ## Protocol
 
@@ -145,8 +148,9 @@ macOS and Windows host registration are not implemented.
 - Two dsh servers cannot share a port. If something already listens on 3080 (for example
   a dsh started from a terminal), the start fails with dsh's own `EADDRINUSE` report.
   Pick another port in the popup.
-- The token URL is a credential. It is stored in extension storage and in the state file
-  (mode 0600); it is never sent anywhere except `127.0.0.1`.
+- The token URL is a credential. It is stored in extension storage, the state file, and
+  the per-launch dsh log (both files mode 0600, the log in a shared `/tmp`); it is never
+  sent anywhere except `127.0.0.1`.
 - The host is a local code-execution surface. Only the pinned extension ID may talk to
   it, and `start` runs a fixed command; the only variables are workspace, port, and the
   `DSH_EXT_PACKAGE` / `DSH_EXT_LAUNCH*` debug overrides.

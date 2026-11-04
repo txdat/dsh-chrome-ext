@@ -87,6 +87,7 @@ function env(dir, launcher) {
   return {
     ...process.env,
     DSH_EXT_STATE_DIR: dir,
+    DSH_EXT_LOG_DIR: path.join(dir, 'logs'),
     DSH_EXT_READY_TIMEOUT_MS: '20000',
     DSH_EXT_LAUNCH: process.execPath,
     DSH_EXT_LAUNCH_ARGS: JSON.stringify([launcher]),
@@ -132,6 +133,9 @@ const stateOf = (dir) => {
   return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
 };
 
+/** Per-launch dsh logs only; host.log lives in the state dir, not here. */
+const launchLogs = (dir) => readdirSync(path.join(dir, 'logs')).filter((name) => name.startsWith('dsh-'));
+
 test('start replies with the parsed URL while stdin stays open', async () => {
   const dir = tempDir();
   const { reply } = await request(hostArgv, { type: 'start' }, env(dir, stub(dir, { name: 'ok.mjs' })));
@@ -145,6 +149,9 @@ test('start replies with the parsed URL while stdin stays open', async () => {
     assert.equal(reply.port, Number(new URL(reply.url).port));
     assert.ok(alive(reply.pid), 'the detached launcher survives the host exiting');
     assert.equal(stateOf(dir).state, 'ready');
+    assert.ok(existsSync(path.join(dir, 'host.log')), 'host diagnostics stay in the state dir');
+    assert.equal(launchLogs(dir).length, 1, 'the dsh log goes to its own dir');
+    assert.ok(existsSync(reply.logFile), 'the reply names the dsh log');
   } finally {
     killGroup(reply.pid);
   }
@@ -167,7 +174,7 @@ test('start reuses a live server instead of spawning a second one', async () => 
     assert.equal(again.reply.reused, true);
     assert.equal(again.reply.pid, first.reply.pid);
     assert.equal(again.reply.url, first.reply.url);
-    assert.equal(readdirSync(path.join(dir, 'logs')).length, 1, 'a second start must not write a second log');
+    assert.equal(launchLogs(dir).length, 1, 'a second start must not write a second log');
   } finally {
     killGroup(first.reply.pid);
   }
@@ -210,7 +217,7 @@ test('a launch that outlives the host is resumed, not raced', async () => {
     assert.equal(resumed.reply.running, true);
     assert.equal(resumed.reply.reused, true);
     assert.equal(resumed.reply.pid, launchingPid, 'resumed the same process');
-    assert.equal(readdirSync(path.join(dir, 'logs')).length, 1, 'no second launcher');
+    assert.equal(launchLogs(dir).length, 1, 'no second launcher');
   } finally {
     killGroup(launchingPid);
   }
