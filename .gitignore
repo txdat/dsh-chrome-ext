@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Written by scripts/install-host.mjs; contains absolute paths to this checkout.
+native/com.txdat.dsh_web.json

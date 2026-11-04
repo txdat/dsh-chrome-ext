@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>dsh web</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <h1>dsh web</h1>
+    <p id="status" class="status">checking…</p>
+
+    <div class="row">
+      <button id="open" class="primary">Open dsh web</button>
+      <button id="stop">Stop</button>
+    </div>
+
+    <details>
+      <summary>Options</summary>
+      <label>
+        Workspace
+        <input id="workspace" type="text" placeholder="~ (default)" spellcheck="false" />
+      </label>
+      <label>
+        Port
+        <input id="port" type="number" min="1" max="65535" placeholder="3080" />
+      </label>
+      <p class="hint">Workspace is the agent's working directory; blank means your home directory.</p>
+    </details>
+
+    <details>
+      <summary>Details</summary>
+      <dl id="details"></dl>
+    </details>
+
+    <p id="error" class="error" hidden></p>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
