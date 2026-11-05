@@ -56,6 +56,7 @@ function render() {
   for (const [key, value] of Object.entries({
     url: state.cleanUrl,
     version: state.package,
+    via: state.via,
     log: state.logFile,
     started: state.startedAt,
   })) {

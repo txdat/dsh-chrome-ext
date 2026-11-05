@@ -46,6 +46,7 @@ import path from 'node:path';
 
 /** The popup validates the version field with the same parser; here it is the boundary check. */
 import { parseVersion } from '../extension/lib.js';
+import { DEFAULT_PACKAGE, DEFAULT_VERSION, cliDir, resolveCli } from './cli.mjs';
 
 const STATE_DIR =
   process.env.DSH_EXT_STATE_DIR ??
@@ -57,15 +58,19 @@ const HOST_LOG = path.join(STATE_DIR, 'host.log');
 
 const NODE_BIN = process.env.DSH_EXT_NODE ?? process.execPath;
 const NPX_BIN = process.env.DSH_EXT_NPX ?? path.join(path.dirname(NODE_BIN), 'npx');
-const PACKAGE = process.env.DSH_EXT_PACKAGE ?? '@deepseek-ai/dsh';
+const NPM_BIN = process.env.DSH_EXT_NPM ?? path.join(path.dirname(NODE_BIN), 'npm');
+const PACKAGE = process.env.DSH_EXT_PACKAGE ?? DEFAULT_PACKAGE;
 /**
- * Pinned CLI version. `npx @deepseek-ai/dsh` resolves the `latest` dist-tag on
- * every launch, so a newly published release is downloaded again; an exact
- * version reuses the same npm `_npx` cache entry and never re-resolves.
- * Bump it deliberately, override it per launch from Settings in the popup, or
- * set DSH_EXT_DSH_VERSION.
+ * Pinned CLI version, installed once into CLI_DIR and then run as a binary.
+ * Bump DEFAULT_VERSION in cli.mjs, override it per launch from Settings in the
+ * popup, or set DSH_EXT_DSH_VERSION.
  */
-const PINNED_VERSION = process.env.DSH_EXT_DSH_VERSION ?? '0.2.2-rc.1';
+const PINNED_VERSION = process.env.DSH_EXT_DSH_VERSION ?? DEFAULT_VERSION;
+/** One managed tree; a version change reinstalls it in place instead of adding one. */
+const CLI_DIR = cliDir();
+const INSTALL_LOG = path.join(STATE_DIR, 'install.log');
+/** A first install downloads the CLI, so it gets the same generous budget as readiness. */
+const INSTALL_TIMEOUT_MS = Number(process.env.DSH_EXT_INSTALL_TIMEOUT_MS ?? 600_000);
 const DEFAULT_PORT = 3080;
 /** A cold `npx` install of the CLI can take minutes; the launch is resumable, so err high. */
 const READY_TIMEOUT_MS = Number(process.env.DSH_EXT_READY_TIMEOUT_MS ?? 600_000);
@@ -229,6 +234,7 @@ function finish(state, url, reused) {
     pid: state.pid,
     launchId: state.launchId,
     package: state.package,
+    via: state.via,
     port: portOf(url),
     url,
     cleanUrl: cleanUrl(url),
@@ -244,9 +250,11 @@ function finish(state, url, reused) {
 async function start({ workspace, port, version } = {}) {
   // Validate before touching the state file: a bad version must not restart or
   // resume anything, and npx would read it as a different package anyway.
+  let pinned;
   let spec;
   try {
-    spec = packageSpec(PACKAGE, parseVersion(version) || PINNED_VERSION);
+    pinned = parseVersion(version) || PINNED_VERSION;
+    spec = packageSpec(PACKAGE, pinned);
   } catch (error) {
     return { ok: false, error: error.message };
   }
@@ -275,9 +283,28 @@ async function start({ workspace, port, version } = {}) {
   const logFd = openSync(logFile, 'a', 0o600);
 
   const targetPort = Number.isInteger(port) && port > 0 ? port : DEFAULT_PORT;
-  const args = ['--yes', spec, 'web', '--no-open', '--port', String(targetPort)];
-  const command = process.env.DSH_EXT_LAUNCH ?? NPX_BIN;
-  const commandArgs = process.env.DSH_EXT_LAUNCH ? JSON.parse(process.env.DSH_EXT_LAUNCH_ARGS ?? '[]') : args;
+
+  // Resolve the binary before spawning: a missing or stale tree is installed
+  // here (once, under a lock), so the launch itself stays a plain exec.
+  const cli = await resolveCli({
+    version: pinned,
+    dir: CLI_DIR,
+    npm: NPM_BIN,
+    logFile: INSTALL_LOG,
+    timeoutMs: INSTALL_TIMEOUT_MS,
+    pkg: PACKAGE,
+    log,
+  });
+  if (cli.warning) log(`cli: ${cli.warning}`);
+
+  const override = process.env.DSH_EXT_LAUNCH;
+  const command = override ?? cli.bin ?? NPX_BIN;
+  const commandArgs = override
+    ? JSON.parse(process.env.DSH_EXT_LAUNCH_ARGS ?? '[]')
+    : cli.bin
+      ? ['web', '--no-open', '--port', String(targetPort)]
+      : ['--yes', '--prefer-offline', spec, 'web', '--no-open', '--port', String(targetPort)];
+  const via = override ? 'override' : (cli.via ?? 'npx');
   const cwd = workspace && existsSync(workspace) ? workspace : os.homedir();
   const launchId = randomUUID();
 
@@ -309,6 +336,7 @@ async function start({ workspace, port, version } = {}) {
     pid: child.pid,
     launchId,
     package: spec,
+    via,
     port: targetPort,
     workspace: cwd,
     logFile,
@@ -344,6 +372,7 @@ async function status() {
       starting: true,
       pid: state.pid,
       package: state.package,
+      via: state.via,
       logFile: state.logFile,
       startedAt: state.startedAt,
     };
