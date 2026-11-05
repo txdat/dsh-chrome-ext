@@ -6,6 +6,10 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "check": "biome check .",
     "gen-key": "node scripts/gen-key.mjs --write",
     "rotate-key": "node scripts/gen-key.mjs --write --force",
     "install-host": "node scripts/install-host.mjs",

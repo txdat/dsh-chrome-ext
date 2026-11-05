@@ -16,7 +16,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { parseVersion } from '../extension/lib.js';
-import { DEFAULT_PACKAGE, DEFAULT_VERSION, cliDir, dshBin, installedVersion, resolveCli } from '../native/cli.mjs';
+import { cliDir, DEFAULT_PACKAGE, DEFAULT_VERSION, dshBin, installedVersion, resolveCli } from '../native/cli.mjs';
 
 const argv = process.argv.slice(2);
 

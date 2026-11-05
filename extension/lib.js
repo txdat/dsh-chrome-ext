@@ -14,7 +14,9 @@ const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?(?:\+[0-9A-Za-z.]+)?$/
  * exact version, because npx would silently treat it as a different package.
  */
 export function parseVersion(raw) {
-  const value = String(raw ?? '').trim().replace(/^v/, '');
+  const value = String(raw ?? '')
+    .trim()
+    .replace(/^v/, '');
   if (value === '') return '';
   if (!VERSION_PATTERN.test(value)) {
     throw new Error(`"${raw}" is not an exact version (use e.g. 0.2.2-rc.1, not a tag or a range)`);

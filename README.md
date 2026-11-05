@@ -41,9 +41,10 @@ Two consequences worth knowing before you change anything:
 npm run setup          # register the native host (gen-key is a no-op when a key is pinned)
 npm run install-cli    # optional: pre-install the pinned CLI (the host installs it on first launch)
 npm test               # offline protocol/lifecycle tests, no Chrome needed
+npm run check          # Biome format + lint gate (npm run format applies formatting)
 ```
 
-Then in Chrome: `chrome://extensions` → enable *Developer mode* → *Load unpacked* →
+Then in Chrome: `chrome://extensions` → enable _Developer mode_ → _Load unpacked_ →
 select `extension/`. The ID shown must equal the one `npm run setup` printed
 (`chrome-extension://…/`); the host manifest allows only that ID.
 
@@ -58,25 +59,25 @@ minutes); later launches and version switches reuse that one tree (see
 
 ## Layout
 
-| Path | Role |
-|---|---|
-| `extension/manifest.json` | MV3 manifest; `key` pins the extension ID, `nativeMessaging` permission |
+| Path                                      | Role                                                                                                |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `extension/manifest.json`                 | MV3 manifest; `key` pins the extension ID, `nativeMessaging` permission                             |
 | `extension/icons/icon-{16,32,48,128}.png` | toolbar and store icons, rasterized from `deepseek.svg` (Chrome does not accept SVG manifest icons) |
-| `extension/popup.js` | status / start / stop / open-tab flow |
-| `extension/lib.js` | host call, storage, tabs, and the exact-version parser shared with the host |
-| `extension/background.js` | badge sync only (the popup owns the lifecycle) |
-| `native/host.sh` | the executable Chrome launches; resolves `node`, `npm` and `npx` |
-| `native/host.mjs` | native-messaging protocol, process supervision, state file |
-| `native/cli.mjs` | managed CLI install: one tree, version switch in place, install lock, npx fallback |
-| `scripts/install-cli.mjs` | `npm run install-cli [-- VERSION]`, the terminal path to the same install |
-| `scripts/gen-key.mjs` | generates the pinning key (`--write` stores it, `--force` rotates) |
-| `scripts/install-host.mjs` | writes the host manifest into every browser config dir |
-| `scripts/id.mjs` | extension ID = first 16 bytes of SHA-256 over the DER key, nibbles → `a`-`p` |
-| `test/host.test.mjs` | native host protocol and lifecycle, driven by a stub launcher |
-| `test/lib.test.mjs` | the shared exact-version parser |
-| `test/popup.test.mjs` | popup rendering with a stubbed DOM and `chrome.*` |
-| `test/cli.test.mjs` | managed install, version switch, lock, and fallback decisions |
-| `test/stubs.mjs` | fake installed tree and `npm` stub used by the tests above |
+| `extension/popup.js`                      | status / start / stop / open-tab flow                                                               |
+| `extension/lib.js`                        | host call, storage, tabs, and the exact-version parser shared with the host                         |
+| `extension/background.js`                 | badge sync only (the popup owns the lifecycle)                                                      |
+| `native/host.sh`                          | the executable Chrome launches; resolves `node`, `npm` and `npx`                                    |
+| `native/host.mjs`                         | native-messaging protocol, process supervision, state file                                          |
+| `native/cli.mjs`                          | managed CLI install: one tree, version switch in place, install lock, npx fallback                  |
+| `scripts/install-cli.mjs`                 | `npm run install-cli [-- VERSION]`, the terminal path to the same install                           |
+| `scripts/gen-key.mjs`                     | generates the pinning key (`--write` stores it, `--force` rotates)                                  |
+| `scripts/install-host.mjs`                | writes the host manifest into every browser config dir                                              |
+| `scripts/id.mjs`                          | extension ID = first 16 bytes of SHA-256 over the DER key, nibbles → `a`-`p`                        |
+| `test/host.test.mjs`                      | native host protocol and lifecycle, driven by a stub launcher                                       |
+| `test/lib.test.mjs`                       | the shared exact-version parser                                                                     |
+| `test/popup.test.mjs`                     | popup rendering with a stubbed DOM and `chrome.*`                                                   |
+| `test/cli.test.mjs`                       | managed install, version switch, lock, and fallback decisions                                       |
+| `test/stubs.mjs`                          | fake installed tree and `npm` stub used by the tests above                                          |
 
 State and host diagnostics live outside the repo in `~/.local/state/dsh-chrome-ext/`
 (`state.json` mode 0600, `host.log`). The dsh console output of each launch goes to
@@ -88,11 +89,11 @@ not a reboot; override that dir with `DSH_EXT_LOG_DIR`.
 One request, one response, then the host exits; the spawned dsh is detached and keeps
 running. Replies always carry `running` and `starting` booleans.
 
-| Request | Effect |
-|---|---|
-| `{"type":"start","workspace":"…","port":3099,"version":"0.1.7-rc.2"}` | reuse a live entry, resume an in-flight launch, or spawn and wait for the URL line |
-| `{"type":"status"}` | `{running:true, port, pid, cleanUrl, package, via, logFile}`, `{starting:true, pid, package, via, logFile}` or `{running:false}` |
-| `{"type":"stop"}` | `SIGTERM`/`SIGKILL` the CLI process group, clear state |
+| Request                                                               | Effect                                                                                                                           |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `{"type":"start","workspace":"…","port":3099,"version":"0.1.7-rc.2"}` | reuse a live entry, resume an in-flight launch, or spawn and wait for the URL line                                               |
+| `{"type":"status"}`                                                   | `{running:true, port, pid, cleanUrl, package, via, logFile}`, `{starting:true, pid, package, via, logFile}` or `{running:false}` |
+| `{"type":"stop"}`                                                     | `SIGTERM`/`SIGKILL` the CLI process group, clear state                                                                           |
 
 State has two shapes, and the second is written **before** the host waits for the URL:
 
@@ -131,11 +132,11 @@ Why: `npx` keys its `_npx` cache by spec string, so `@deepseek-ai/dsh` and
 prunes them, and every npx launch revalidates the registry before the CLI starts.
 Measured on this machine (warm caches):
 
-| | installed binary | `npx --prefer-offline` |
-|---|---|---|
-| `dsh --version` | 0.07–0.08 s, no network | 0.70–0.93 s, one registry `GET` |
-| click → "server ready" (3 runs each) | 2.65 s | 3.13 s |
-| disk | 897 MB, replaced in place | 897 MB per spec string, never pruned |
+|                                      | installed binary          | `npx --prefer-offline`               |
+| ------------------------------------ | ------------------------- | ------------------------------------ |
+| `dsh --version`                      | 0.07–0.08 s, no network   | 0.70–0.93 s, one registry `GET`      |
+| click → "server ready" (3 runs each) | 2.65 s                    | 3.13 s                               |
+| disk                                 | 897 MB, replaced in place | 897 MB per spec string, never pruned |
 
 How a `start` picks the command:
 
@@ -197,42 +198,42 @@ set).
 `npm test` covers the host contract without Chrome, network, or a dsh install: it points
 `DSH_EXT_LAUNCH` at a stub launcher that prints the readiness line on an ephemeral port.
 
-| Test | Asserts |
-|---|---|
-| start with stdin left open | reply does not wait for EOF; URL, clean URL, and port parsed |
-| shell wrapper | `host.sh` resolves node/npx and speaks the same protocol |
-| second start | reuses the live pid, writes no second log |
-| stop | process group gone, state cleared |
-| host killed mid-launch | state stays `launching`, `status` reports `starting`, next `start` resumes the same pid |
-| stop with a foreign pid | refuses, warns, the pid survives, stale state cleared |
-| launcher exits without a URL | `ok:false` with the `EADDRINUSE` output attached |
-| pinned spec | the npx fallback is asked for `--yes --prefer-offline @deepseek-ai/dsh@<exact version>`, identical on every launch |
-| managed tree | a matching tree is run directly with `web --no-open --port …`; npx never runs |
-| auto-install | a missing version installs into the CLI dir (exact dependency, `--prefix`, `--no-audit --no-fund --prefer-offline`), then launches from disk |
-| install failure | falls back to npx instead of failing the launch |
-| concurrent installs | two simultaneous resolves install once; a lock from a dead installer is taken over |
-| version overrides | `DSH_EXT_DSH_VERSION` / `DSH_EXT_PACKAGE` win; an already versioned package is not pinned twice |
-| popup version | `start.version` replaces the pin, is echoed back as `package`, and is written to state |
-| invalid version | `latest`, ranges, and `0.2.2 --registry …` are rejected before any spawn; no argv, no state |
-| version parser | exact versions accepted (`v` prefix dropped), blanks mean "default", ranges/tags/option-like input refused |
-| popup status | a launch in flight is named by its version (`starting dsh@0.1.7-rc.2…`); the copy never promises a download, and the running state still reports port and pid |
-| unknown request | rejected |
+| Test                         | Asserts                                                                                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| start with stdin left open   | reply does not wait for EOF; URL, clean URL, and port parsed                                                                                                  |
+| shell wrapper                | `host.sh` resolves node/npx and speaks the same protocol                                                                                                      |
+| second start                 | reuses the live pid, writes no second log                                                                                                                     |
+| stop                         | process group gone, state cleared                                                                                                                             |
+| host killed mid-launch       | state stays `launching`, `status` reports `starting`, next `start` resumes the same pid                                                                       |
+| stop with a foreign pid      | refuses, warns, the pid survives, stale state cleared                                                                                                         |
+| launcher exits without a URL | `ok:false` with the `EADDRINUSE` output attached                                                                                                              |
+| pinned spec                  | the npx fallback is asked for `--yes --prefer-offline @deepseek-ai/dsh@<exact version>`, identical on every launch                                            |
+| managed tree                 | a matching tree is run directly with `web --no-open --port …`; npx never runs                                                                                 |
+| auto-install                 | a missing version installs into the CLI dir (exact dependency, `--prefix`, `--no-audit --no-fund --prefer-offline`), then launches from disk                  |
+| install failure              | falls back to npx instead of failing the launch                                                                                                               |
+| concurrent installs          | two simultaneous resolves install once; a lock from a dead installer is taken over                                                                            |
+| version overrides            | `DSH_EXT_DSH_VERSION` / `DSH_EXT_PACKAGE` win; an already versioned package is not pinned twice                                                               |
+| popup version                | `start.version` replaces the pin, is echoed back as `package`, and is written to state                                                                        |
+| invalid version              | `latest`, ranges, and `0.2.2 --registry …` are rejected before any spawn; no argv, no state                                                                   |
+| version parser               | exact versions accepted (`v` prefix dropped), blanks mean "default", ranges/tags/option-like input refused                                                    |
+| popup status                 | a launch in flight is named by its version (`starting dsh@0.1.7-rc.2…`); the copy never promises a download, and the running state still reports port and pid |
+| unknown request              | rejected                                                                                                                                                      |
 
 Run by hand on this machine, `env -i PATH=/usr/bin:/bin` (no node on PATH), isolated
 `DSH_HOME`:
 
-| Check | Result |
-|---|---|
-| node resolution with a Chrome-like PATH | `zsh -ic` lookup found the fnm node |
-| real `npx @deepseek-ai/dsh web --no-open --port 3097` | ready in ~5 s, `launchId` present through the `npx`→`npm exec` hand-off |
-| token URL over plain HTTP | `303` + `Set-Cookie`; clean URL alone `401`; token reusable |
-| `google-chrome --pack-extension` | packs the extension (valid manifest, loads) |
-| managed install, real CLI | `npm run install-cli` -> 897 MB at `~/.local/share/dsh-chrome-ext/cli`, `dsh --version` = 0.2.2-rc.1 |
-| click -> ready, managed vs npx | 2.65 s vs 3.13 s to the readiness line, 3 runs each; replies `via:"cli"` / `via:"npx"` |
-| `npx @deepseek-ai/dsh@0.2.2-rc.1 --version` twice | 56 s cold (download), 0.5 s with `npm_config_offline=true` on the second run: the pin is served from the npm cache, no network |
-| popup with stubbed `chrome.*` over HTTP | running state, details pane, and the failed-start state all render as coded |
-| popup with a stubbed host (Node harness) | saved version restored into the field, sent as `version`, echoed into Details, persisted; `latest` refused inline and never sent as a start; the in-flight status names the version (`npm test`, `test/popup.test.mjs`) |
-| port 3080 already in use | `ok:false` with the real `EADDRINUSE` startup report |
+| Check                                                 | Result                                                                                                                                                                                                                  |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| node resolution with a Chrome-like PATH               | `zsh -ic` lookup found the fnm node                                                                                                                                                                                     |
+| real `npx @deepseek-ai/dsh web --no-open --port 3097` | ready in ~5 s, `launchId` present through the `npx`→`npm exec` hand-off                                                                                                                                                 |
+| token URL over plain HTTP                             | `303` + `Set-Cookie`; clean URL alone `401`; token reusable                                                                                                                                                             |
+| `google-chrome --pack-extension`                      | packs the extension (valid manifest, loads)                                                                                                                                                                             |
+| managed install, real CLI                             | `npm run install-cli` -> 897 MB at `~/.local/share/dsh-chrome-ext/cli`, `dsh --version` = 0.2.2-rc.1                                                                                                                    |
+| click -> ready, managed vs npx                        | 2.65 s vs 3.13 s to the readiness line, 3 runs each; replies `via:"cli"` / `via:"npx"`                                                                                                                                  |
+| `npx @deepseek-ai/dsh@0.2.2-rc.1 --version` twice     | 56 s cold (download), 0.5 s with `npm_config_offline=true` on the second run: the pin is served from the npm cache, no network                                                                                          |
+| popup with stubbed `chrome.*` over HTTP               | running state, details pane, and the failed-start state all render as coded                                                                                                                                             |
+| popup with a stubbed host (Node harness)              | saved version restored into the field, sent as `version`, echoed into Details, persisted; `latest` refused inline and never sent as a start; the in-flight status names the version (`npm test`, `test/popup.test.mjs`) |
+| port 3080 already in use                              | `ok:false` with the real `EADDRINUSE` startup report                                                                                                                                                                    |
 
 Not verified here: clicking through the popup inside a real Chrome extension context
 (the host registration is written and the ID is pinned, but that last step needs a human

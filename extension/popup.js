@@ -1,4 +1,13 @@
-import { callHost, openUrl, parseVersion, recall, recallSettings, remember, rememberSettings, setBadge } from './lib.js';
+import {
+  callHost,
+  openUrl,
+  parseVersion,
+  recall,
+  recallSettings,
+  remember,
+  rememberSettings,
+  setBadge,
+} from './lib.js';
 
 const els = {
   status: document.getElementById('status'),
