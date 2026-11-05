@@ -133,7 +133,10 @@ test('clicking start names the chosen version while the host works', async () =>
   assert.doesNotMatch(inflight, /download/i);
   assert.equal(requests.filter((request) => request.type === 'start')[0].version, '0.1.7-rc.2');
   assert.match(els.get('status').textContent, /running on port 8080/);
-  const keys = els.get('details').children.filter((child) => child.tag === 'dt').map((child) => child.textContent);
+  const keys = els
+    .get('details')
+    .children.filter((child) => child.tag === 'dt')
+    .map((child) => child.textContent);
   assert.ok(keys.includes('version') && keys.includes('via'), `details name the version and its source: ${keys}`);
   assert.equal(globalThis.createdTab.url, 'http://127.0.0.1:8080/?token=t');
 });

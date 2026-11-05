@@ -5,10 +5,7 @@
   "description": "Starts `npx @deepseek-ai/dsh web --no-open` through a native host and opens the tokenized URL in this Chrome.",
   "minimum_chrome_version": "116",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqORop0+2IYN1EJHKWijftzw4tnsp4bOzOl2onrNxmOF1qs77+44CKYW1Ip8X5W9+sa7hQ13PyIX4OEGpHYhqctmhQuRg7IIUfTjTSMfbHaqzb/FnoAWyTk6UAVTdNL5UV45myna1WFjawMKtOuBsAOLXpSw4/Dw4HbZVs9uMnD8LzNGCEQ0fJILnxjpYN2kUYZMQ/leFTjm3nxbIIHF+fXNFYfJqmZ7PL+Dp7hjjNozt36ayMUAo0kc/qcPew9JLvYHiFwd7kHy98hIjrM1tc7fLnx2lXAqgCTUlUQZKG9gyeZIVVE1r6fpOh8jnaJXQmOJ3FUOvi0s0uhJZXedYmQIDAQAB",
-  "permissions": [
-    "nativeMessaging",
-    "storage"
-  ],
+  "permissions": ["nativeMessaging", "storage"],
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",

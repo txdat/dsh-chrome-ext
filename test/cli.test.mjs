@@ -60,18 +60,17 @@ test('a missing or stale tree is installed in place at the exact version', async
   fakeTree(cli, '0.1.0');
   const { file: npm } = stubInstaller(dir);
 
-  const result = await resolveCli({ version: '1.2.3', dir: cli, npm, env: env(dir), logFile: path.join(dir, 'install.log') });
+  const result = await resolveCli({
+    version: '1.2.3',
+    dir: cli,
+    npm,
+    env: env(dir),
+    logFile: path.join(dir, 'install.log'),
+  });
 
   assert.equal(result.via, 'cli');
   assert.equal(installedVersion(cli), '1.2.3', 'the tree was replaced, not duplicated');
-  assert.deepEqual(installArgs(dir), [
-    'install',
-    '--prefix',
-    cli,
-    '--no-audit',
-    '--no-fund',
-    '--prefer-offline',
-  ]);
+  assert.deepEqual(installArgs(dir), ['install', '--prefix', cli, '--no-audit', '--no-fund', '--prefer-offline']);
   assert.deepEqual(manifestOf(dir).dependencies, { [DEFAULT_PACKAGE]: '1.2.3' }, 'an exact dependency, never a range');
 });
 
@@ -80,7 +79,13 @@ test('a failed install falls back to npx with a warning instead of failing the l
   const cli = path.join(dir, 'cli');
   const { file: npm } = stubInstaller(dir, { fail: true });
 
-  const result = await resolveCli({ version: '1.2.3', dir: cli, npm, env: env(dir), logFile: path.join(dir, 'install.log') });
+  const result = await resolveCli({
+    version: '1.2.3',
+    dir: cli,
+    npm,
+    env: env(dir),
+    logFile: path.join(dir, 'install.log'),
+  });
 
   assert.equal(result.via, 'npx');
   assert.equal(result.bin, undefined);
@@ -94,8 +99,22 @@ test('concurrent launches install once', async () => {
   const environment = env(dir);
 
   const results = await Promise.all([
-    resolveCli({ version: '1.2.3', dir: cli, npm, env: environment, logFile: path.join(dir, 'install.log'), timeoutMs: 10_000 }),
-    resolveCli({ version: '1.2.3', dir: cli, npm, env: environment, logFile: path.join(dir, 'install.log'), timeoutMs: 10_000 }),
+    resolveCli({
+      version: '1.2.3',
+      dir: cli,
+      npm,
+      env: environment,
+      logFile: path.join(dir, 'install.log'),
+      timeoutMs: 10_000,
+    }),
+    resolveCli({
+      version: '1.2.3',
+      dir: cli,
+      npm,
+      env: environment,
+      logFile: path.join(dir, 'install.log'),
+      timeoutMs: 10_000,
+    }),
   ]);
 
   assert.deepEqual(
@@ -143,7 +162,13 @@ test('a CLI dir whose parent does not exist yet is created', async () => {
   const cli = path.join(dir, 'share', 'dsh-chrome-ext', 'cli');
   const { file: npm } = stubInstaller(dir);
 
-  const result = await resolveCli({ version: '1.2.3', dir: cli, npm, env: env(dir), logFile: path.join(dir, 'install.log') });
+  const result = await resolveCli({
+    version: '1.2.3',
+    dir: cli,
+    npm,
+    env: env(dir),
+    logFile: path.join(dir, 'install.log'),
+  });
 
   assert.equal(result.via, 'cli');
   assert.equal(installedVersion(cli), '1.2.3');
@@ -162,7 +187,14 @@ test('a lock is respected while the installer outlives its host', async () => {
   );
 
   const started = Date.now();
-  const result = await resolveCli({ version: '1.2.3', dir: cli, npm, env: env(dir), logFile: path.join(dir, 'install.log'), timeoutMs: 10_000 });
+  const result = await resolveCli({
+    version: '1.2.3',
+    dir: cli,
+    npm,
+    env: env(dir),
+    logFile: path.join(dir, 'install.log'),
+    timeoutMs: 10_000,
+  });
   const elapsed = Date.now() - started;
 
   assert.equal(result.via, 'cli');
@@ -202,7 +234,14 @@ test('a lock left by a dead installer does not block the launch', async () => {
   const { file: npm } = stubInstaller(dir);
   writeFileSync(`${cli}.lock`, JSON.stringify({ pid: 2 ** 22 + 7, at: new Date(0).toISOString() }));
 
-  const result = await resolveCli({ version: '1.2.3', dir: cli, npm, env: env(dir), logFile: path.join(dir, 'install.log'), timeoutMs: 5_000 });
+  const result = await resolveCli({
+    version: '1.2.3',
+    dir: cli,
+    npm,
+    env: env(dir),
+    logFile: path.join(dir, 'install.log'),
+    timeoutMs: 5_000,
+  });
 
   assert.equal(result.via, 'cli');
   assert.equal(existsSync(`${cli}.lock`), false, 'the stale lock was cleared');

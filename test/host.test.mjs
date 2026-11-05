@@ -7,7 +7,16 @@
  */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
@@ -283,7 +292,11 @@ test('a launch that outlives the host is resumed, not raced', async () => {
     assert.equal(status.reply.starting, true);
     assert.equal(status.reply.running, false);
     assert.equal(status.reply.pid, launchingPid);
-    assert.match(status.reply.package, /^@deepseek-ai\/dsh@\d+\.\d+\.\d+/, 'the popup can name the version it is waiting for');
+    assert.match(
+      status.reply.package,
+      /^@deepseek-ai\/dsh@\d+\.\d+\.\d+/,
+      'the popup can name the version it is waiting for',
+    );
 
     const resumed = await request(hostArgv, { type: 'start' }, environment);
     assert.equal(resumed.reply.ok, true);
@@ -323,11 +336,7 @@ test('stop refuses a pid it cannot prove it started', async () => {
 
 test('a launcher that exits early reports its output and clears the state', async () => {
   const dir = tempDir();
-  const { reply } = await request(
-    hostArgv,
-    { type: 'start' },
-    env(dir, stub(dir, { name: 'fails.mjs', exit: true })),
-  );
+  const { reply } = await request(hostArgv, { type: 'start' }, env(dir, stub(dir, { name: 'fails.mjs', exit: true })));
   assert.equal(reply.ok, false);
   assert.match(reply.error, /exited \(code 1/);
   assert.match(reply.output, /EADDRINUSE/);
@@ -425,7 +434,11 @@ test('start runs the installed CLI directly, without npx', async () => {
   const launcher = stub(dir, { name: 'ok.mjs' });
   const tree = fakeTree(path.join(dir, 'cli'), DEFAULT_VERSION);
 
-  const { reply } = await request(hostArgv, { type: 'start' }, cliEnv(dir, launcher, { DSH_EXT_NPX: path.join(dir, 'no-npx') }));
+  const { reply } = await request(
+    hostArgv,
+    { type: 'start' },
+    cliEnv(dir, launcher, { DSH_EXT_NPX: path.join(dir, 'no-npx') }),
+  );
   try {
     assert.equal(reply.ok, true);
     assert.equal(reply.via, 'cli', 'the managed tree is used');
@@ -460,7 +473,11 @@ test('a failed install falls back to npx with --prefer-offline', async () => {
   const dir = tempDir();
   const { file: npx, argvFile } = stubNpx(dir, stub(dir, { name: 'ok.mjs' }));
 
-  const { reply } = await request(hostArgv, { type: 'start' }, cliEnv(dir, stub(dir, { name: 'unused.mjs' }), { DSH_EXT_NPX: npx }));
+  const { reply } = await request(
+    hostArgv,
+    { type: 'start' },
+    cliEnv(dir, stub(dir, { name: 'unused.mjs' }), { DSH_EXT_NPX: npx }),
+  );
   try {
     assert.equal(reply.ok, true);
     assert.equal(reply.via, 'npx');

@@ -87,11 +87,9 @@ async function acquireLock(lockFile, { timeoutMs, log }) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      writeFileSync(
-        lockFile,
-        JSON.stringify({ pid: process.pid, installPid: null, at: new Date().toISOString() }),
-        { flag: 'wx' },
-      );
+      writeFileSync(lockFile, JSON.stringify({ pid: process.pid, installPid: null, at: new Date().toISOString() }), {
+        flag: 'wx',
+      });
       return true;
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
@@ -165,7 +163,8 @@ export async function resolveCli({
   const lockFile = `${dir}.lock`;
   mkdirSync(path.dirname(lockFile), { recursive: true });
   const lock = { pid: process.pid, installPid: null };
-  if (!(await acquireLock(lockFile, { timeoutMs, log }))) return { via: 'npx', warning: 'another install is still running' };
+  if (!(await acquireLock(lockFile, { timeoutMs, log })))
+    return { via: 'npx', warning: 'another install is still running' };
   try {
     // A concurrent launch may have finished this very install while we waited.
     if (installedVersion(dir) === version && existsSync(dshBin(dir))) return { bin: dshBin(dir), via: 'cli' };

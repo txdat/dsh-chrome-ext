@@ -48,7 +48,7 @@ import path from 'node:path';
 
 /** The popup validates the version field with the same parser; here it is the boundary check. */
 import { parseVersion } from '../extension/lib.js';
-import { DEFAULT_PACKAGE, DEFAULT_VERSION, cliDir, resolveCli } from './cli.mjs';
+import { cliDir, DEFAULT_PACKAGE, DEFAULT_VERSION, resolveCli } from './cli.mjs';
 
 const STATE_DIR =
   process.env.DSH_EXT_STATE_DIR ??
