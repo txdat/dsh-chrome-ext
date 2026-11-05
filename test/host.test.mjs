@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
@@ -205,6 +205,28 @@ test('start replies with the parsed URL while stdin stays open', async () => {
   } finally {
     killGroup(reply.pid);
   }
+});
+
+test('the shell wrapper needs npm or npx, not both', async () => {
+  const dir = tempDir();
+  const bin = path.join(dir, 'bin');
+  mkdirSync(bin, { recursive: true });
+  symlinkSync(process.execPath, path.join(bin, 'node'));
+  symlinkSync(path.join(path.dirname(process.execPath), 'npm'), path.join(bin, 'npm'));
+
+  const { reply } = await request(
+    wrapperArgv,
+    { type: 'status' },
+    {
+      ...env(dir, stub(dir, { name: 'unused.mjs' })),
+      DSH_EXT_NODE: path.join(bin, 'node'),
+      DSH_EXT_NPX: path.join(dir, 'missing-npx'),
+      PATH: '/usr/bin:/bin',
+      HOME: dir,
+    },
+    { keepStdinOpen: false },
+  );
+  assert.deepEqual(reply, { ok: true, running: false, starting: false }, 'a managed install needs npm, not npx');
 });
 
 test('the shell wrapper resolves node and speaks the same protocol', async () => {
@@ -444,6 +466,21 @@ test('a failed install falls back to npx with --prefer-offline', async () => {
     assert.equal(reply.via, 'npx');
     assert.equal(readArgv(argvFile)[1], '--prefer-offline', 'the fallback skips registry revalidation');
     assert.match(readArgv(argvFile)[2], /^@deepseek-ai\/dsh@\d+\.\d+\.\d+/);
+  } finally {
+    killGroup(reply.pid);
+  }
+});
+
+test('the test launcher override skips the managed install', async () => {
+  const dir = tempDir();
+  const launcher = stub(dir, { name: 'ok.mjs' });
+  stubInstaller(dir); // a working installer that must never run behind an override
+
+  const { reply } = await request(hostArgv, { type: 'start' }, env(dir, launcher));
+  try {
+    assert.equal(reply.ok, true);
+    assert.equal(reply.via, 'override');
+    assert.equal(existsSync(path.join(dir, 'install-argv.txt')), false, 'no install behind an override');
   } finally {
     killGroup(reply.pid);
   }

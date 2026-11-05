@@ -143,8 +143,11 @@ How a `start` picks the command:
 2. The tree at the CLI dir already has the requested version → run it (`via: "cli"`).
 3. Otherwise `npm install --prefix <cli dir>` with an **exact** dependency, so a new
    version replaces the tree in place. The install runs under `<cli dir>.lock`, so
-   concurrent launches install once; a lock left by a killed host is taken over. On
-   failure (no npm, offline, install error) the launch falls back to
+   concurrent launches install once. The lock records the **installer's** pid, not just
+   the host's: Chrome kills a host when the popup closes, the detached installer keeps
+   writing, and a waiter has to wait for the process that is actually touching the tree.
+   The lock is only stale once both are gone, and a client removes it only if it still
+   holds it. On failure (no npm, offline, install error) the launch falls back to
    `npx --yes --prefer-offline @deepseek-ai/dsh@<version>` (`via: "npx"`), so a broken
    install never blocks the launcher.
 4. `DSH_EXT_PACKAGE` pointing at a renamed package always takes the npx path: the bin
@@ -185,6 +188,9 @@ asdf PATH entries. `native/host.sh` tries, in order:
 
 `npm` and `npx` are taken from node's own directory, so a shim on PATH cannot shadow
 them. Both children get `dirname(node)` prepended to `PATH` so their shebangs resolve.
+Only **one** of them is required: npm installs and updates the managed tree, npx is the
+fallback, and `host.sh` exits only when neither resolves (unless `DSH_EXT_DSH_BIN` is
+set).
 
 ## Verified
 

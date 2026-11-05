@@ -5,14 +5,17 @@
  * install would, or exits non-zero so the npx fallback can be checked.
  */
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import { DEFAULT_PACKAGE, dshBin, installedVersion, resolveCli } from '../native/cli.mjs';
 import { fakeTree, stubInstaller } from './stubs.mjs';
 
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tempDirs = [];
 after(() => {
   for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
@@ -144,6 +147,53 @@ test('a CLI dir whose parent does not exist yet is created', async () => {
 
   assert.equal(result.via, 'cli');
   assert.equal(installedVersion(cli), '1.2.3');
+});
+
+test('a lock is respected while the installer outlives its host', async () => {
+  const dir = tempDir();
+  const cli = path.join(dir, 'cli');
+  const { file: npm } = stubInstaller(dir);
+  // Chrome kills the host when the popup closes, but the installer it spawned
+  // keeps running: the lock must wait on that pid, not just on the host's.
+  const installer = spawn('sleep', ['0.8'], { stdio: 'ignore' });
+  writeFileSync(
+    `${cli}.lock`,
+    JSON.stringify({ pid: 2 ** 22 + 31, installPid: installer.pid, at: new Date().toISOString() }),
+  );
+
+  const started = Date.now();
+  const result = await resolveCli({ version: '1.2.3', dir: cli, npm, env: env(dir), logFile: path.join(dir, 'install.log'), timeoutMs: 10_000 });
+  const elapsed = Date.now() - started;
+
+  assert.equal(result.via, 'cli');
+  assert.ok(elapsed >= 700, `waited for the surviving installer instead of taking over (${elapsed}ms)`);
+});
+
+test('install-cli installs even when DSH_EXT_DSH_BIN is set', async () => {
+  const dir = tempDir();
+  const cli = path.join(dir, 'cli');
+  const { file: npm } = stubInstaller(dir);
+
+  const child = spawn(process.execPath, [path.join(root, 'scripts', 'install-cli.mjs'), '1.2.3'], {
+    env: {
+      ...env(dir),
+      DSH_EXT_CLI_DIR: cli,
+      DSH_EXT_NPM: npm,
+      DSH_EXT_DSH_BIN: '/bin/true',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let out = '';
+  child.stdout.on('data', (chunk) => {
+    out += chunk;
+  });
+  child.stderr.on('data', (chunk) => {
+    out += chunk;
+  });
+  const code = await new Promise((resolve) => child.on('close', resolve));
+
+  assert.equal(code, 0, out);
+  assert.equal(installedVersion(cli), '1.2.3', 'the managed tree was installed despite the override');
 });
 
 test('a lock left by a dead installer does not block the launch', async () => {

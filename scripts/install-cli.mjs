@@ -52,6 +52,9 @@ const result = await resolveCli({
   dir,
   npm,
   logFile,
+  // This script's job is the install itself: an existing bin override must not
+  // turn it into a no-op.
+  env: { ...process.env, DSH_EXT_DSH_BIN: '' },
   log: (message) => console.log(`install-cli: ${message}`),
 });
 

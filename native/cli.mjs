@@ -56,22 +56,42 @@ function alive(pid) {
   }
 }
 
-function lockIsStale(lockFile) {
+function readLock(lockFile) {
   try {
-    const { pid, at } = JSON.parse(readFileSync(lockFile, 'utf8'));
-    const started = Date.parse(at);
-    if (!Number.isFinite(started)) return true;
-    return !alive(pid) || Date.now() - started > LOCK_STALE_MS;
+    return JSON.parse(readFileSync(lockFile, 'utf8'));
   } catch {
-    return true;
+    return null;
   }
+}
+
+/**
+ * A lock is stale only when neither the host that took it nor the installer it
+ * spawned is alive. Chrome kills a host when the popup closes, but the detached
+ * installer keeps writing into the tree: taking the lock over then would run two
+ * installs in one directory, so the installer pid is the one that decides.
+ */
+function lockIsStale(lockFile) {
+  const lock = readLock(lockFile);
+  if (lock === null) return true;
+  const started = Date.parse(lock.at);
+  if (Number.isFinite(started) && Date.now() - started > LOCK_STALE_MS) return true;
+  return !alive(lock.pid) && !alive(lock.installPid);
+}
+
+/** Remove the lock only if it is still ours; a survivor may have taken it over. */
+function releaseLock(lockFile, lock) {
+  if (readLock(lockFile)?.pid === lock.pid) rmSync(lockFile, { force: true });
 }
 
 async function acquireLock(lockFile, { timeoutMs, log }) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      writeFileSync(lockFile, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }), { flag: 'wx' });
+      writeFileSync(
+        lockFile,
+        JSON.stringify({ pid: process.pid, installPid: null, at: new Date().toISOString() }),
+        { flag: 'wx' },
+      );
       return true;
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
@@ -91,7 +111,7 @@ function manifest(version, pkg) {
   return `${JSON.stringify({ name: 'dsh-chrome-ext-cli', private: true, dependencies: { [pkg]: version } }, null, 2)}\n`;
 }
 
-async function runInstall({ dir, npm, version, pkg, env, logFile, timeoutMs }) {
+async function runInstall({ dir, npm, version, pkg, env, logFile, timeoutMs, onSpawn }) {
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, 'package.json'), manifest(version, pkg));
   const fd = openSync(logFile, 'a', 0o600);
@@ -100,7 +120,10 @@ async function runInstall({ dir, npm, version, pkg, env, logFile, timeoutMs }) {
       const child = spawn(npm, ['install', '--prefix', dir, '--no-audit', '--no-fund', '--prefer-offline'], {
         env,
         stdio: ['ignore', fd, fd],
+        // Detached so the install completes even if Chrome kills this host.
+        detached: true,
       });
+      if (child.pid) onSpawn?.(child.pid);
       const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
       child.on('error', () => {
         clearTimeout(timer);
@@ -141,17 +164,33 @@ export async function resolveCli({
 
   const lockFile = `${dir}.lock`;
   mkdirSync(path.dirname(lockFile), { recursive: true });
+  const lock = { pid: process.pid, installPid: null };
   if (!(await acquireLock(lockFile, { timeoutMs, log }))) return { via: 'npx', warning: 'another install is still running' };
   try {
     // A concurrent launch may have finished this very install while we waited.
     if (installedVersion(dir) === version && existsSync(dshBin(dir))) return { bin: dshBin(dir), via: 'cli' };
     log?.(`install: ${pkg}@${version} -> ${dir}`);
-    const installed = await runInstall({ dir, npm, version, pkg, env, logFile, timeoutMs });
+    const installed = await runInstall({
+      dir,
+      npm,
+      version,
+      pkg,
+      env,
+      logFile,
+      timeoutMs,
+      // Hand the lock to the installer: if this host dies, waiters must still
+      // wait for npm instead of starting a second install.
+      onSpawn: (pid) => {
+        lock.installPid = pid;
+        writeFileSync(lockFile, JSON.stringify({ ...lock, at: new Date().toISOString() }));
+        log?.(`install: npm pid ${pid}`);
+      },
+    });
     if (installed && installedVersion(dir) === version) return { bin: dshBin(dir), via: 'cli' };
     return { via: 'npx', warning: `install of ${pkg}@${version} failed; see ${logFile}` };
   } catch (error) {
     return { via: 'npx', warning: `install failed: ${error.message}` };
   } finally {
-    rmSync(lockFile, { force: true });
+    releaseLock(lockFile, lock);
   }
 }

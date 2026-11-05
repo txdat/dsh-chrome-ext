@@ -13,11 +13,13 @@
  *   { type: "stop" }
  *
  * State file shapes:
- *   { state: "launching", pid, launchId, package, port, workspace, logFile, startedAt }
- *   { state: "ready",     pid, launchId, package, port, url, cleanUrl, workspace, logFile, startedAt }
+ *   { state: "launching", pid, launchId, package, via, port, workspace, logFile, startedAt }
+ *   { state: "ready",     pid, launchId, package, via, port, url, cleanUrl, workspace, logFile, startedAt }
  *
- * `package` is the exact npx spec that was launched, so a caller can name the
- * version it is waiting for instead of guessing.
+ * `package` is the exact spec that was launched, so a caller can name the version
+ * it is waiting for instead of guessing. `via` says where the binary came from:
+ * `cli` (managed install), `env` (DSH_EXT_DSH_BIN), `npx` (fallback), `override`
+ * (DSH_EXT_LAUNCH, tests and debugging only).
  *
  * `launching` is written as soon as the child exists, so a launch that outlives
  * this process (slow first install, closed popup) is resumed instead of raced.
@@ -284,27 +286,30 @@ async function start({ workspace, port, version } = {}) {
 
   const targetPort = Number.isInteger(port) && port > 0 ? port : DEFAULT_PORT;
 
-  // Resolve the binary before spawning: a missing or stale tree is installed
-  // here (once, under a lock), so the launch itself stays a plain exec.
-  const cli = await resolveCli({
-    version: pinned,
-    dir: CLI_DIR,
-    npm: NPM_BIN,
-    logFile: INSTALL_LOG,
-    timeoutMs: INSTALL_TIMEOUT_MS,
-    pkg: PACKAGE,
-    log,
-  });
-  if (cli.warning) log(`cli: ${cli.warning}`);
-
   const override = process.env.DSH_EXT_LAUNCH;
+
+  // Resolve the binary before spawning: a missing or stale tree is installed
+  // here (once, under a lock), so the launch itself stays a plain exec. An
+  // explicit launcher must not pay for, or race, an install it will not use.
+  const cli = override
+    ? { via: 'override' }
+    : await resolveCli({
+        version: pinned,
+        dir: CLI_DIR,
+        npm: NPM_BIN,
+        logFile: INSTALL_LOG,
+        timeoutMs: INSTALL_TIMEOUT_MS,
+        pkg: PACKAGE,
+        log,
+      });
+  if (cli.warning) log(`cli: ${cli.warning}`);
   const command = override ?? cli.bin ?? NPX_BIN;
   const commandArgs = override
     ? JSON.parse(process.env.DSH_EXT_LAUNCH_ARGS ?? '[]')
     : cli.bin
       ? ['web', '--no-open', '--port', String(targetPort)]
       : ['--yes', '--prefer-offline', spec, 'web', '--no-open', '--port', String(targetPort)];
-  const via = override ? 'override' : (cli.via ?? 'npx');
+  const via = cli.via ?? 'npx';
   const cwd = workspace && existsSync(workspace) ? workspace : os.homedir();
   const launchId = randomUUID();
 
