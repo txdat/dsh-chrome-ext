@@ -65,6 +65,8 @@ First run downloads the pinned CLI (a few minutes, cached afterwards; see
 | `scripts/install-host.mjs` | writes the host manifest into every browser config dir |
 | `scripts/id.mjs` | extension ID = first 16 bytes of SHA-256 over the DER key, nibbles → `a`-`p` |
 | `test/host.test.mjs` | native host protocol and lifecycle, driven by a stub launcher |
+| `test/lib.test.mjs` | the shared exact-version parser |
+| `test/popup.test.mjs` | popup rendering with a stubbed DOM and `chrome.*` |
 
 State and host diagnostics live outside the repo in `~/.local/state/dsh-chrome-ext/`
 (`state.json` mode 0600, `host.log`). The dsh console output of each launch goes to
@@ -79,7 +81,7 @@ running. Replies always carry `running` and `starting` booleans.
 | Request | Effect |
 |---|---|
 | `{"type":"start","workspace":"…","port":3099,"version":"0.1.7-rc.2"}` | reuse a live entry, resume an in-flight launch, or spawn and wait for the URL line |
-| `{"type":"status"}` | `{running:true, port, pid, cleanUrl, package, logFile}`, `{starting:true, pid, logFile}` or `{running:false}` |
+| `{"type":"status"}` | `{running:true, port, pid, cleanUrl, package, logFile}`, `{starting:true, pid, package, logFile}` or `{running:false}` |
 | `{"type":"stop"}` | `SIGTERM`/`SIGKILL` the npx process group, clear state |
 
 State has two shapes, and the second is written **before** the host waits for the URL:
@@ -159,6 +161,7 @@ child gets `dirname(node)` prepended to `PATH` so the `npx` shebang resolves.
 | popup version | `start.version` replaces the pin, is echoed back as `package`, and is written to state |
 | invalid version | `latest`, ranges, and `0.2.2 --registry …` are rejected before any spawn; no argv, no state |
 | version parser | exact versions accepted (`v` prefix dropped), blanks mean "default", ranges/tags/option-like input refused |
+| popup status | a launch in flight is named by its version (`starting dsh@0.1.7-rc.2…`); the copy never promises a download, and the running state still reports port and pid |
 | unknown request | rejected |
 
 Run by hand on this machine, `env -i PATH=/usr/bin:/bin` (no node on PATH), isolated
@@ -172,7 +175,7 @@ Run by hand on this machine, `env -i PATH=/usr/bin:/bin` (no node on PATH), isol
 | `google-chrome --pack-extension` | packs the extension (valid manifest, loads) |
 | `npx @deepseek-ai/dsh@0.2.2-rc.1 --version` twice | 56 s cold (download), 0.5 s with `npm_config_offline=true` on the second run: the pin is served from the npm cache, no network |
 | popup with stubbed `chrome.*` over HTTP | running state, details pane, and the failed-start state all render as coded |
-| popup with a stubbed host (Node harness) | saved version restored into the field, sent as `version`, echoed into Details, persisted; `latest` refused inline and never sent as a start |
+| popup with a stubbed host (Node harness) | saved version restored into the field, sent as `version`, echoed into Details, persisted; `latest` refused inline and never sent as a start; the in-flight status names the version (`npm test`, `test/popup.test.mjs`) |
 | port 3080 already in use | `ok:false` with the real `EADDRINUSE` startup report |
 
 Not verified here: clicking through the popup inside a real Chrome extension context

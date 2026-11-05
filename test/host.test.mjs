@@ -238,6 +238,7 @@ test('a launch that outlives the host is resumed, not raced', async () => {
     assert.equal(status.reply.starting, true);
     assert.equal(status.reply.running, false);
     assert.equal(status.reply.pid, launchingPid);
+    assert.match(status.reply.package, /^@deepseek-ai\/dsh@\d+\.\d+\.\d+/, 'the popup can name the version it is waiting for');
 
     const resumed = await request(hostArgv, { type: 'start' }, environment);
     assert.equal(resumed.reply.ok, true);

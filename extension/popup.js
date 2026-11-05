@@ -25,13 +25,26 @@ function showError(error) {
   els.error.textContent = error ?? '';
 }
 
+/** `@deepseek-ai/dsh@0.2.2-rc.1` -> `0.2.2-rc.1`; the status line stays short. */
+function versionLabel(spec) {
+  return spec ? spec.slice(spec.lastIndexOf('@') + 1) : '';
+}
+
+/**
+ * A pinned launch is normally served from the npm cache, so the status names the
+ * version instead of promising a download.
+ */
+function startingText(version) {
+  return `starting dsh${version ? `@${version}` : ''}…`;
+}
+
 function render() {
   const running = state?.running === true;
   const starting = state?.starting === true;
   els.status.textContent = running
     ? `running on port ${state.port} (pid ${state.pid})`
     : starting
-      ? 'starting dsh (first run downloads the CLI)…'
+      ? startingText(versionLabel(state.package))
       : 'not running';
   els.status.className = `status ${running ? 'running' : starting ? 'starting' : ''}`;
   els.open.textContent = running ? 'Open tab' : starting ? 'Wait for startup' : 'Start and open';
@@ -102,7 +115,7 @@ els.open.addEventListener('click', async () => {
     // An invalid version must stop the click before the host is asked to launch.
     const version = await saveVersion();
     if (version === null) return;
-    els.status.textContent = 'starting dsh (first run downloads the CLI)…';
+    els.status.textContent = startingText(version);
     els.status.className = 'status starting';
     const port = Number.parseInt(els.port.value, 10);
     const started = await callHost({

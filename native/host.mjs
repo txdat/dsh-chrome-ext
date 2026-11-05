@@ -8,13 +8,16 @@
  * detached and survives the host exiting.
  *
  * Requests:
- *   { type: "start",  workspace?: string, port?: number }
+ *   { type: "start",  workspace?: string, port?: number, version?: string }
  *   { type: "status" }
  *   { type: "stop" }
  *
  * State file shapes:
- *   { state: "launching", pid, launchId, port, workspace, logFile, startedAt }
- *   { state: "ready",     pid, launchId, port, url, cleanUrl, workspace, logFile, startedAt }
+ *   { state: "launching", pid, launchId, package, port, workspace, logFile, startedAt }
+ *   { state: "ready",     pid, launchId, package, port, url, cleanUrl, workspace, logFile, startedAt }
+ *
+ * `package` is the exact npx spec that was launched, so a caller can name the
+ * version it is waiting for instead of guessing.
  *
  * `launching` is written as soon as the child exists, so a launch that outlives
  * this process (slow first install, closed popup) is resumed instead of raced.
@@ -335,7 +338,15 @@ async function status() {
     return { ok: true, running: false, starting: false, stale: true };
   }
   if (state.state === 'launching') {
-    return { ok: true, running: false, starting: true, pid: state.pid, logFile: state.logFile, startedAt: state.startedAt };
+    return {
+      ok: true,
+      running: false,
+      starting: true,
+      pid: state.pid,
+      package: state.package,
+      logFile: state.logFile,
+      startedAt: state.startedAt,
+    };
   }
   if (!(await portOpen(state.port))) {
     clearState();
