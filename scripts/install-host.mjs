@@ -48,7 +48,7 @@ chmodSync(hostScript, 0o755);
 
 const hostManifest = {
   name: HOST_NAME,
-  description: 'Runs `npx @deepseek-ai/dsh web --no-open` for the dsh web launcher extension.',
+  description: 'Runs `npx @deepseek-ai/dsh@0.2.2-rc.1 web --no-open` for the dsh web launcher extension.',
   path: hostScript,
   type: 'stdio',
   allowed_origins: [`chrome-extension://${id}/`],

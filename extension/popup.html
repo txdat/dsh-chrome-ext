@@ -37,6 +37,11 @@
           <input id="port" type="number" min="1" max="65535" placeholder="3080" inputmode="numeric" />
           <span class="field-hint">Loopback port the web UI binds to. Default 3080.</span>
         </label>
+        <label class="field">
+          <span class="field-label">CLI version</span>
+          <input id="version" type="text" placeholder="use the built-in pin" spellcheck="false" autocomplete="off" />
+          <span class="field-hint">Exact <code>@deepseek-ai/dsh</code> version to run, e.g. 0.2.2-rc.1. Pinning keeps npx on its cached install instead of downloading again.</span>
+        </label>
         <div class="pane-actions">
           <button id="reset" class="ghost" type="button">Reset to defaults</button>
         </div>

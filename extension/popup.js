@@ -1,4 +1,4 @@
-import { callHost, openUrl, recall, remember, setBadge } from './lib.js';
+import { callHost, openUrl, parseVersion, recall, recallSettings, remember, rememberSettings, setBadge } from './lib.js';
 
 const els = {
   status: document.getElementById('status'),
@@ -7,6 +7,7 @@ const els = {
   reset: document.getElementById('reset'),
   workspace: document.getElementById('workspace'),
   port: document.getElementById('port'),
+  version: document.getElementById('version'),
   details: document.getElementById('details'),
   detailsPane: document.getElementById('details-pane'),
   error: document.getElementById('error'),
@@ -41,6 +42,7 @@ function render() {
   if (!running) return;
   for (const [key, value] of Object.entries({
     url: state.cleanUrl,
+    version: state.package,
     log: state.logFile,
     started: state.startedAt,
   })) {
@@ -70,6 +72,23 @@ async function openTab(state) {
   }
 }
 
+/**
+ * The stored version is the only setting that outlives the popup: the pin is
+ * meant to be stable, while workspace and port stay per-open like before.
+ */
+async function saveVersion() {
+  try {
+    const version = parseVersion(els.version.value);
+    els.version.value = version;
+    await rememberSettings({ version });
+    showError(null);
+    return version;
+  } catch (error) {
+    showError(error.message);
+    return null;
+  }
+}
+
 els.open.addEventListener('click', async () => {
   busy(true);
   showError(null);
@@ -80,6 +99,9 @@ els.open.addEventListener('click', async () => {
       await openTab(current);
       return;
     }
+    // An invalid version must stop the click before the host is asked to launch.
+    const version = await saveVersion();
+    if (version === null) return;
     els.status.textContent = 'starting dsh (first run downloads the CLI)…';
     els.status.className = 'status starting';
     const port = Number.parseInt(els.port.value, 10);
@@ -87,6 +109,7 @@ els.open.addEventListener('click', async () => {
       type: 'start',
       ...(els.workspace.value.trim() ? { workspace: els.workspace.value.trim() } : {}),
       ...(Number.isInteger(port) ? { port } : {}),
+      ...(version ? { version } : {}),
     });
     if (!started.ok) {
       // The host records the launch before it waits, so a timeout still leaves a
@@ -110,11 +133,16 @@ els.open.addEventListener('click', async () => {
   }
 });
 
-els.reset.addEventListener('click', () => {
+els.reset.addEventListener('click', async () => {
   els.workspace.value = '';
   els.port.value = '';
+  els.version.value = '';
+  await rememberSettings({ version: '' });
+  showError(null);
   els.workspace.focus();
 });
+
+els.version.addEventListener('change', () => void saveVersion());
 
 els.stop.addEventListener('click', async () => {
   busy(true);
@@ -135,6 +163,8 @@ els.stop.addEventListener('click', async () => {
 
 const saved = await recall();
 state = saved;
+const settings = await recallSettings();
+els.version.value = settings?.version ?? '';
 render();
 if (saved) {
   try {

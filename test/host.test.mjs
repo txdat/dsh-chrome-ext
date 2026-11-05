@@ -94,6 +94,33 @@ function env(dir, launcher) {
   };
 }
 
+/**
+ * A stub `npx` that records its argument vector, then runs the launcher stub.
+ * This is the only way to see the command the host would really run: setting
+ * DSH_EXT_LAUNCH bypasses argument construction entirely.
+ */
+function stubNpx(dir, launcher) {
+  const argvFile = path.join(dir, 'npx-argv.txt');
+  const file = path.join(dir, 'npx');
+  writeFileSync(
+    file,
+    `#!/bin/sh\nfor arg in "$@"; do printf '%s\\n' "$arg"; done >"${argvFile}"\nexec "${process.execPath}" "${launcher}"\n`,
+    { mode: 0o755 },
+  );
+  return { file, argvFile };
+}
+
+/** env(dir, …) minus the launcher override, so host.mjs builds the npx command itself. */
+function npxEnv(dir, npxBin, overrides = {}) {
+  const environment = env(dir, path.join(dir, 'unused.mjs'));
+  delete environment.DSH_EXT_LAUNCH;
+  delete environment.DSH_EXT_LAUNCH_ARGS;
+  environment.DSH_EXT_NPX = npxBin;
+  return { ...environment, ...overrides };
+}
+
+const readArgv = (file) => readFileSync(file, 'utf8').trim().split('\n');
+
 /** Spawn the host, send one framed request, and read one framed reply. */
 async function request(argv, message, environment, { keepStdinOpen = true } = {}) {
   const child = spawn(argv[0], argv.slice(1), { env: environment, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -259,6 +286,106 @@ test('a launcher that exits early reports its output and clears the state', asyn
   assert.match(reply.error, /exited \(code 1/);
   assert.match(reply.output, /EADDRINUSE/);
   assert.equal(stateOf(dir), null);
+});
+
+test('npx is asked for an exact CLI version so the cached install is reused', async () => {
+  const dir = tempDir();
+  const { file: npx, argvFile } = stubNpx(dir, stub(dir, { name: 'ok.mjs' }));
+  const environment = npxEnv(dir, npx);
+  const first = await request(hostArgv, { type: 'start' }, environment);
+  try {
+    assert.equal(first.reply.ok, true);
+    const argv = readArgv(argvFile);
+    assert.equal(argv[0], '--yes', 'the launch must stay non-interactive');
+    assert.match(
+      argv[1],
+      /^@deepseek-ai\/dsh@\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/,
+      'the package spec must pin an exact version, not a dist-tag (`latest`) or a range',
+    );
+    assert.deepEqual(argv.slice(2), ['web', '--no-open', '--port', '3080']);
+
+    // A different spec would hash to a different npx cache dir and re-download.
+    await request(hostArgv, { type: 'stop' }, environment);
+    const second = await request(hostArgv, { type: 'start' }, environment);
+    try {
+      assert.deepEqual(readArgv(argvFile), argv, 'every launch must ask for the same spec');
+    } finally {
+      killGroup(second.reply.pid);
+    }
+  } finally {
+    killGroup(first.reply.pid);
+  }
+});
+
+test('DSH_EXT_DSH_VERSION and DSH_EXT_PACKAGE override the pin', async () => {
+  const dir = tempDir();
+  const { file: npx, argvFile } = stubNpx(dir, stub(dir, { name: 'ok.mjs' }));
+  const { reply } = await request(
+    hostArgv,
+    { type: 'start', port: 3099 },
+    npxEnv(dir, npx, { DSH_EXT_DSH_VERSION: '0.0.0-test.1', DSH_EXT_PACKAGE: '@example/dsh' }),
+  );
+  try {
+    assert.equal(reply.ok, true);
+    assert.deepEqual(readArgv(argvFile), ['--yes', '@example/dsh@0.0.0-test.1', 'web', '--no-open', '--port', '3099']);
+  } finally {
+    killGroup(reply.pid);
+  }
+});
+
+test('a version chosen in the popup replaces the built-in pin', async () => {
+  const dir = tempDir();
+  const { file: npx, argvFile } = stubNpx(dir, stub(dir, { name: 'ok.mjs' }));
+  const { reply } = await request(hostArgv, { type: 'start', version: '0.1.7-rc.2' }, npxEnv(dir, npx));
+  try {
+    assert.equal(reply.ok, true);
+    assert.equal(readArgv(argvFile)[1], '@deepseek-ai/dsh@0.1.7-rc.2');
+    assert.equal(reply.package, '@deepseek-ai/dsh@0.1.7-rc.2', 'the reply names the spec that is running');
+    assert.equal(stateOf(dir).package, '@deepseek-ai/dsh@0.1.7-rc.2', 'the state records it too');
+  } finally {
+    killGroup(reply.pid);
+  }
+});
+
+test('an empty version falls back to the built-in pin', async () => {
+  const dir = tempDir();
+  const { file: npx, argvFile } = stubNpx(dir, stub(dir, { name: 'ok.mjs' }));
+  const { reply } = await request(hostArgv, { type: 'start', version: '   ' }, npxEnv(dir, npx));
+  try {
+    assert.equal(reply.ok, true);
+    assert.equal(readArgv(argvFile)[1], reply.package);
+    assert.match(reply.package, /^@deepseek-ai\/dsh@\d+\.\d+\.\d+/);
+  } finally {
+    killGroup(reply.pid);
+  }
+});
+
+test('a version that is not exact is rejected before anything starts', async () => {
+  const dir = tempDir();
+  const { file: npx, argvFile } = stubNpx(dir, stub(dir, { name: 'ok.mjs' }));
+  for (const version of ['latest', '^0.2.0', '~0.2.0', '0.2', '0.2.x', '0.2.2 --registry http://x', '0.2.2; id']) {
+    const { reply } = await request(hostArgv, { type: 'start', version }, npxEnv(dir, npx));
+    assert.equal(reply.ok, false, `rejected: ${version}`);
+    assert.match(reply.error, /not an exact version/, version);
+  }
+  assert.equal(existsSync(argvFile), false, 'nothing was spawned');
+  assert.equal(stateOf(dir), null, 'no launch was recorded');
+});
+
+test('an already versioned DSH_EXT_PACKAGE is not pinned twice', async () => {
+  const dir = tempDir();
+  const { file: npx, argvFile } = stubNpx(dir, stub(dir, { name: 'ok.mjs' }));
+  const { reply } = await request(
+    hostArgv,
+    { type: 'start' },
+    npxEnv(dir, npx, { DSH_EXT_PACKAGE: '@deepseek-ai/dsh@0.1.7-rc.2' }),
+  );
+  try {
+    assert.equal(reply.ok, true);
+    assert.equal(readArgv(argvFile)[1], '@deepseek-ai/dsh@0.1.7-rc.2');
+  } finally {
+    killGroup(reply.pid);
+  }
 });
 
 test('an unknown request type is rejected', async () => {
