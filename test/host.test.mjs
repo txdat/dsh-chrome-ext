@@ -7,10 +7,13 @@
  */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
+
+import { DEFAULT_VERSION, dshBin } from '../native/cli.mjs';
+import { fakeTree, stubInstaller } from './stubs.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 /** host.mjs is invoked through node, so the checkout's file mode does not matter. */
@@ -84,13 +87,25 @@ setInterval(() => {}, 1 << 30);
 }
 
 function env(dir, launcher) {
+  // A failing npm and a missing npx keep every test off the network and off the
+  // real CLI dir; tests that need either stub pre-create it before calling here.
+  const npm = path.join(dir, 'npm');
+  if (!existsSync(npm)) stubInstaller(dir, { fail: true });
   return {
     ...process.env,
     DSH_EXT_STATE_DIR: dir,
     DSH_EXT_LOG_DIR: path.join(dir, 'logs'),
+    DSH_EXT_CLI_DIR: path.join(dir, 'cli'),
+    DSH_EXT_DSH_BIN: '',
+    DSH_EXT_NPM: npm,
+    DSH_EXT_NPX: path.join(dir, 'missing-npx'),
     DSH_EXT_READY_TIMEOUT_MS: '20000',
     DSH_EXT_LAUNCH: process.execPath,
     DSH_EXT_LAUNCH_ARGS: JSON.stringify([launcher]),
+    FAKE_ARGV: path.join(dir, 'bin-argv.txt'),
+    FAKE_INSTALL_ARGV: path.join(dir, 'install-argv.txt'),
+    FAKE_NODE: process.execPath,
+    FAKE_LAUNCHER: launcher,
   };
 }
 
@@ -120,6 +135,14 @@ function npxEnv(dir, npxBin, overrides = {}) {
 }
 
 const readArgv = (file) => readFileSync(file, 'utf8').trim().split('\n');
+
+/** env() without the launcher override, so the host resolves and spawns the CLI itself. */
+function cliEnv(dir, launcher, overrides = {}) {
+  const environment = env(dir, launcher);
+  delete environment.DSH_EXT_LAUNCH;
+  delete environment.DSH_EXT_LAUNCH_ARGS;
+  return { ...environment, ...overrides };
+}
 
 /** Spawn the host, send one framed request, and read one framed reply. */
 async function request(argv, message, environment, { keepStdinOpen = true } = {}) {
@@ -182,6 +205,28 @@ test('start replies with the parsed URL while stdin stays open', async () => {
   } finally {
     killGroup(reply.pid);
   }
+});
+
+test('the shell wrapper needs npm or npx, not both', async () => {
+  const dir = tempDir();
+  const bin = path.join(dir, 'bin');
+  mkdirSync(bin, { recursive: true });
+  symlinkSync(process.execPath, path.join(bin, 'node'));
+  symlinkSync(path.join(path.dirname(process.execPath), 'npm'), path.join(bin, 'npm'));
+
+  const { reply } = await request(
+    wrapperArgv,
+    { type: 'status' },
+    {
+      ...env(dir, stub(dir, { name: 'unused.mjs' })),
+      DSH_EXT_NODE: path.join(bin, 'node'),
+      DSH_EXT_NPX: path.join(dir, 'missing-npx'),
+      PATH: '/usr/bin:/bin',
+      HOME: dir,
+    },
+    { keepStdinOpen: false },
+  );
+  assert.deepEqual(reply, { ok: true, running: false, starting: false }, 'a managed install needs npm, not npx');
 });
 
 test('the shell wrapper resolves node and speaks the same protocol', async () => {
@@ -297,13 +342,13 @@ test('npx is asked for an exact CLI version so the cached install is reused', as
   try {
     assert.equal(first.reply.ok, true);
     const argv = readArgv(argvFile);
-    assert.equal(argv[0], '--yes', 'the launch must stay non-interactive');
+    assert.deepEqual(argv.slice(0, 2), ['--yes', '--prefer-offline'], 'non-interactive and cache-first');
     assert.match(
-      argv[1],
+      argv[2],
       /^@deepseek-ai\/dsh@\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/,
       'the package spec must pin an exact version, not a dist-tag (`latest`) or a range',
     );
-    assert.deepEqual(argv.slice(2), ['web', '--no-open', '--port', '3080']);
+    assert.deepEqual(argv.slice(3), ['web', '--no-open', '--port', '3080']);
 
     // A different spec would hash to a different npx cache dir and re-download.
     await request(hostArgv, { type: 'stop' }, environment);
@@ -328,7 +373,9 @@ test('DSH_EXT_DSH_VERSION and DSH_EXT_PACKAGE override the pin', async () => {
   );
   try {
     assert.equal(reply.ok, true);
-    assert.deepEqual(readArgv(argvFile), ['--yes', '@example/dsh@0.0.0-test.1', 'web', '--no-open', '--port', '3099']);
+    assert.deepEqual(readArgv(argvFile).slice(0, 1), ['--yes']);
+    assert.equal(readArgv(argvFile)[2], '@example/dsh@0.0.0-test.1');
+    assert.deepEqual(readArgv(argvFile).slice(3), ['web', '--no-open', '--port', '3099']);
   } finally {
     killGroup(reply.pid);
   }
@@ -340,7 +387,7 @@ test('a version chosen in the popup replaces the built-in pin', async () => {
   const { reply } = await request(hostArgv, { type: 'start', version: '0.1.7-rc.2' }, npxEnv(dir, npx));
   try {
     assert.equal(reply.ok, true);
-    assert.equal(readArgv(argvFile)[1], '@deepseek-ai/dsh@0.1.7-rc.2');
+    assert.equal(readArgv(argvFile)[2], '@deepseek-ai/dsh@0.1.7-rc.2');
     assert.equal(reply.package, '@deepseek-ai/dsh@0.1.7-rc.2', 'the reply names the spec that is running');
     assert.equal(stateOf(dir).package, '@deepseek-ai/dsh@0.1.7-rc.2', 'the state records it too');
   } finally {
@@ -354,7 +401,7 @@ test('an empty version falls back to the built-in pin', async () => {
   const { reply } = await request(hostArgv, { type: 'start', version: '   ' }, npxEnv(dir, npx));
   try {
     assert.equal(reply.ok, true);
-    assert.equal(readArgv(argvFile)[1], reply.package);
+    assert.equal(readArgv(argvFile)[2], reply.package);
     assert.match(reply.package, /^@deepseek-ai\/dsh@\d+\.\d+\.\d+/);
   } finally {
     killGroup(reply.pid);
@@ -373,6 +420,72 @@ test('a version that is not exact is rejected before anything starts', async () 
   assert.equal(stateOf(dir), null, 'no launch was recorded');
 });
 
+test('start runs the installed CLI directly, without npx', async () => {
+  const dir = tempDir();
+  const launcher = stub(dir, { name: 'ok.mjs' });
+  const tree = fakeTree(path.join(dir, 'cli'), DEFAULT_VERSION);
+
+  const { reply } = await request(hostArgv, { type: 'start' }, cliEnv(dir, launcher, { DSH_EXT_NPX: path.join(dir, 'no-npx') }));
+  try {
+    assert.equal(reply.ok, true);
+    assert.equal(reply.via, 'cli', 'the managed tree is used');
+    assert.deepEqual(readArgv(tree.argvFile), ['web', '--no-open', '--port', '3080'], 'the bin is called directly');
+    assert.equal(existsSync(path.join(dir, 'npx-argv.txt')), false, 'npx never ran');
+  } finally {
+    killGroup(reply.pid);
+  }
+});
+
+test('a missing version is installed once, then launched from disk', async () => {
+  const dir = tempDir();
+  const launcher = stub(dir, { name: 'ok.mjs' });
+  const { file: npm } = stubInstaller(dir);
+
+  const { reply } = await request(hostArgv, { type: 'start' }, cliEnv(dir, launcher, { DSH_EXT_NPM: npm }));
+  try {
+    assert.equal(reply.ok, true);
+    assert.equal(reply.via, 'cli');
+    assert.equal(reply.package, `@deepseek-ai/dsh@${DEFAULT_VERSION}`);
+    const install = readArgv(path.join(dir, 'install-argv.txt'));
+    assert.deepEqual(install.slice(0, 2), ['install', '--prefix']);
+    assert.ok(install.includes(path.join(dir, 'cli')));
+    assert.equal(existsSync(dshBin(path.join(dir, 'cli'))), true, 'the tree is in place');
+    assert.deepEqual(readArgv(path.join(dir, 'bin-argv.txt')), ['web', '--no-open', '--port', '3080']);
+  } finally {
+    killGroup(reply.pid);
+  }
+});
+
+test('a failed install falls back to npx with --prefer-offline', async () => {
+  const dir = tempDir();
+  const { file: npx, argvFile } = stubNpx(dir, stub(dir, { name: 'ok.mjs' }));
+
+  const { reply } = await request(hostArgv, { type: 'start' }, cliEnv(dir, stub(dir, { name: 'unused.mjs' }), { DSH_EXT_NPX: npx }));
+  try {
+    assert.equal(reply.ok, true);
+    assert.equal(reply.via, 'npx');
+    assert.equal(readArgv(argvFile)[1], '--prefer-offline', 'the fallback skips registry revalidation');
+    assert.match(readArgv(argvFile)[2], /^@deepseek-ai\/dsh@\d+\.\d+\.\d+/);
+  } finally {
+    killGroup(reply.pid);
+  }
+});
+
+test('the test launcher override skips the managed install', async () => {
+  const dir = tempDir();
+  const launcher = stub(dir, { name: 'ok.mjs' });
+  stubInstaller(dir); // a working installer that must never run behind an override
+
+  const { reply } = await request(hostArgv, { type: 'start' }, env(dir, launcher));
+  try {
+    assert.equal(reply.ok, true);
+    assert.equal(reply.via, 'override');
+    assert.equal(existsSync(path.join(dir, 'install-argv.txt')), false, 'no install behind an override');
+  } finally {
+    killGroup(reply.pid);
+  }
+});
+
 test('an already versioned DSH_EXT_PACKAGE is not pinned twice', async () => {
   const dir = tempDir();
   const { file: npx, argvFile } = stubNpx(dir, stub(dir, { name: 'ok.mjs' }));
@@ -383,7 +496,7 @@ test('an already versioned DSH_EXT_PACKAGE is not pinned twice', async () => {
   );
   try {
     assert.equal(reply.ok, true);
-    assert.equal(readArgv(argvFile)[1], '@deepseek-ai/dsh@0.1.7-rc.2');
+    assert.equal(readArgv(argvFile)[2], '@deepseek-ai/dsh@0.1.7-rc.2');
   } finally {
     killGroup(reply.pid);
   }

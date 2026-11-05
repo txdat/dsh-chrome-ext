@@ -62,15 +62,17 @@ find_node() {
   return 1
 }
 
-# npx lives next to node in every standard layout.
-find_npx() {
-  local node_dir found
-  node_dir="$(dirname -- "$1")"
-  is_exec "${DSH_EXT_NPX:-}" && { printf '%s' "$DSH_EXT_NPX"; return 0; }
-  is_exec "$node_dir/npx" && { printf '%s' "$node_dir/npx"; return 0; }
-  found="$(command -v npx 2>/dev/null || true)"
+# npm and npx live next to node in every standard layout. npm installs and
+# updates the managed CLI; npx is only the fallback, so either one is enough.
+find_tool() {
+  local name="$1" node_dir="$2" var found
+  var="DSH_EXT_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')"
+  found="${!var:-}"
   is_exec "$found" && { printf '%s' "$found"; return 0; }
-  found="$(known_locations npx || true)"
+  is_exec "$node_dir/$name" && { printf '%s' "$node_dir/$name"; return 0; }
+  found="$(command -v "$name" 2>/dev/null || true)"
+  is_exec "$found" && { printf '%s' "$found"; return 0; }
+  found="$(known_locations "$name" || true)"
   is_exec "$found" && { printf '%s' "$found"; return 0; }
   return 1
 }
@@ -80,12 +82,16 @@ if ! is_exec "$NODE_BIN"; then
   say "could not resolve node (set DSH_EXT_NODE to an absolute path)"
   exit 1
 fi
-NPX_BIN="$(find_npx "$NODE_BIN" || true)"
-if ! is_exec "$NPX_BIN"; then
-  say "could not resolve npx next to $NODE_BIN (set DSH_EXT_NPX)"
+
+NODE_DIR="$(dirname -- "$NODE_BIN")"
+NPM_BIN="$(find_tool npm "$NODE_DIR" || true)"
+NPX_BIN="$(find_tool npx "$NODE_DIR" || true)"
+if ! is_exec "$NPM_BIN" && ! is_exec "$NPX_BIN" && ! is_exec "${DSH_EXT_DSH_BIN:-}"; then
+  say "could not resolve npm or npx next to $NODE_BIN (set DSH_EXT_NPM, DSH_EXT_NPX or DSH_EXT_DSH_BIN)"
   exit 1
 fi
 
 export DSH_EXT_NODE="$NODE_BIN"
-export DSH_EXT_NPX="$NPX_BIN"
+is_exec "$NPM_BIN" && export DSH_EXT_NPM="$NPM_BIN"
+is_exec "$NPX_BIN" && export DSH_EXT_NPX="$NPX_BIN"
 exec "$NODE_BIN" "$HERE/host.mjs" 2>>"$HOST_LOG"

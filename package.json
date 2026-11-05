@@ -2,13 +2,14 @@
   "name": "dsh-chrome-ext",
   "version": "0.1.0",
   "private": true,
-  "description": "Chrome extension that starts `npx @deepseek-ai/dsh web --no-open` through a native messaging host and opens the tokenized URL in the current Chrome.",
+  "description": "Chrome extension that launches the pinned @deepseek-ai/dsh web CLI through a native messaging host and opens the tokenized URL in the current Chrome.",
   "type": "module",
   "scripts": {
-    "test": "node --test",
+    "test": "node --test test/*.test.mjs",
     "gen-key": "node scripts/gen-key.mjs --write",
     "rotate-key": "node scripts/gen-key.mjs --write --force",
     "install-host": "node scripts/install-host.mjs",
+    "install-cli": "node scripts/install-cli.mjs",
     "setup": "npm run gen-key && npm run install-host"
   }
 }
