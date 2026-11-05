@@ -41,6 +41,9 @@ import { connect } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
+/** The popup validates the version field with the same parser; here it is the boundary check. */
+import { parseVersion } from '../extension/lib.js';
+
 const STATE_DIR =
   process.env.DSH_EXT_STATE_DIR ??
   path.join(process.env.XDG_STATE_HOME ?? path.join(os.homedir(), '.local', 'state'), 'dsh-chrome-ext');
@@ -52,6 +55,14 @@ const HOST_LOG = path.join(STATE_DIR, 'host.log');
 const NODE_BIN = process.env.DSH_EXT_NODE ?? process.execPath;
 const NPX_BIN = process.env.DSH_EXT_NPX ?? path.join(path.dirname(NODE_BIN), 'npx');
 const PACKAGE = process.env.DSH_EXT_PACKAGE ?? '@deepseek-ai/dsh';
+/**
+ * Pinned CLI version. `npx @deepseek-ai/dsh` resolves the `latest` dist-tag on
+ * every launch, so a newly published release is downloaded again; an exact
+ * version reuses the same npm `_npx` cache entry and never re-resolves.
+ * Bump it deliberately, override it per launch from Settings in the popup, or
+ * set DSH_EXT_DSH_VERSION.
+ */
+const PINNED_VERSION = process.env.DSH_EXT_DSH_VERSION ?? '0.2.2-rc.1';
 const DEFAULT_PORT = 3080;
 /** A cold `npx` install of the CLI can take minutes; the launch is resumable, so err high. */
 const READY_TIMEOUT_MS = Number(process.env.DSH_EXT_READY_TIMEOUT_MS ?? 600_000);
@@ -61,6 +72,12 @@ const LAUNCH_ID_VAR = 'DSH_EXT_LAUNCH_ID';
 const URL_LINE = /(?:^|\n)dsh web: (https?:\/\/\S+)/;
 
 mkdirSync(STATE_DIR, { recursive: true });
+
+/** `@scope/name` -> `@scope/name@1.2.3`; an already versioned spec is left alone. */
+function packageSpec(pkg, version) {
+  if (!version || pkg.includes('@', 1)) return pkg;
+  return `${pkg}@${version}`;
+}
 
 function log(message) {
   try {
@@ -208,6 +225,7 @@ function finish(state, url, reused) {
     state: 'ready',
     pid: state.pid,
     launchId: state.launchId,
+    package: state.package,
     port: portOf(url),
     url,
     cleanUrl: cleanUrl(url),
@@ -220,7 +238,16 @@ function finish(state, url, reused) {
   return readyReply(ready, reused);
 }
 
-async function start({ workspace, port } = {}) {
+async function start({ workspace, port, version } = {}) {
+  // Validate before touching the state file: a bad version must not restart or
+  // resume anything, and npx would read it as a different package anyway.
+  let spec;
+  try {
+    spec = packageSpec(PACKAGE, parseVersion(version) || PINNED_VERSION);
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+
   const previous = readState();
   if (previous?.state === 'ready' && sameProcess(previous) && (await portOpen(previous.port))) {
     log(`reusing pid ${previous.pid}`);
@@ -245,7 +272,7 @@ async function start({ workspace, port } = {}) {
   const logFd = openSync(logFile, 'a', 0o600);
 
   const targetPort = Number.isInteger(port) && port > 0 ? port : DEFAULT_PORT;
-  const args = ['--yes', PACKAGE, 'web', '--no-open', '--port', String(targetPort)];
+  const args = ['--yes', spec, 'web', '--no-open', '--port', String(targetPort)];
   const command = process.env.DSH_EXT_LAUNCH ?? NPX_BIN;
   const commandArgs = process.env.DSH_EXT_LAUNCH ? JSON.parse(process.env.DSH_EXT_LAUNCH_ARGS ?? '[]') : args;
   const cwd = workspace && existsSync(workspace) ? workspace : os.homedir();
@@ -278,6 +305,7 @@ async function start({ workspace, port } = {}) {
     state: 'launching',
     pid: child.pid,
     launchId,
+    package: spec,
     port: targetPort,
     workspace: cwd,
     logFile,
