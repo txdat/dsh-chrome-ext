@@ -59,30 +59,47 @@ minutes); later launches and version switches reuse that one tree (see
 
 ## Layout
 
-| Path                                      | Role                                                                                                |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `extension/manifest.json`                 | MV3 manifest; `key` pins the extension ID, `nativeMessaging` permission                             |
-| `extension/icons/icon-{16,32,48,128}.png` | toolbar and store icons, rasterized from `deepseek.svg` (Chrome does not accept SVG manifest icons) |
-| `extension/popup.js`                      | status / start / stop / open-tab flow                                                               |
-| `extension/lib.js`                        | host call, storage, tabs, and the exact-version parser shared with the host                         |
-| `extension/background.js`                 | badge sync only (the popup owns the lifecycle)                                                      |
-| `native/host.sh`                          | the executable Chrome launches; resolves `node`, `npm` and `npx`                                    |
-| `native/host.mjs`                         | native-messaging protocol, process supervision, state file                                          |
-| `native/cli.mjs`                          | managed CLI install: one tree, version switch in place, install lock, npx fallback                  |
-| `scripts/install-cli.mjs`                 | `npm run install-cli [-- VERSION]`, the terminal path to the same install                           |
-| `scripts/gen-key.mjs`                     | generates the pinning key (`--write` stores it, `--force` rotates)                                  |
-| `scripts/install-host.mjs`                | writes the host manifest into every browser config dir                                              |
-| `scripts/id.mjs`                          | extension ID = first 16 bytes of SHA-256 over the DER key, nibbles → `a`-`p`                        |
-| `test/host.test.mjs`                      | native host protocol and lifecycle, driven by a stub launcher                                       |
-| `test/lib.test.mjs`                       | the shared exact-version parser                                                                     |
-| `test/popup.test.mjs`                     | popup rendering with a stubbed DOM and `chrome.*`                                                   |
-| `test/cli.test.mjs`                       | managed install, version switch, lock, and fallback decisions                                       |
-| `test/stubs.mjs`                          | fake installed tree and `npm` stub used by the tests above                                          |
+| Path                                      | Role                                                                                                     |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `extension/manifest.json`                 | MV3 manifest; `key` pins the extension ID, `nativeMessaging` permission                                  |
+| `extension/icons/icon-{16,32,48,128}.png` | toolbar and store icons; Chrome does not accept SVG manifest icons, so these raster files are the source |
+| `extension/popup.js`                      | status / start / stop / open-tab flow                                                                    |
+| `extension/lib.js`                        | host call, storage, tabs, and the exact-version parser shared with the host                              |
+| `extension/background.js`                 | badge sync only (the popup owns the lifecycle)                                                           |
+| `native/host.sh`                          | the executable Chrome launches; resolves `node`, `npm` and `npx`                                         |
+| `native/host.mjs`                         | native-messaging protocol, process supervision, state file                                               |
+| `native/cli.mjs`                          | managed CLI install: one tree, version switch in place, install lock, npx fallback                       |
+| `scripts/install-cli.mjs`                 | `npm run install-cli [-- VERSION]`, the terminal path to the same install                                |
+| `scripts/gen-key.mjs`                     | generates the pinning key (`--write` stores it, `--force` rotates)                                       |
+| `scripts/install-host.mjs`                | writes the host manifest into every browser config dir                                                   |
+| `scripts/id.mjs`                          | extension ID = first 16 bytes of SHA-256 over the DER key, nibbles → `a`-`p`                             |
+| `AGENTS.md`                               | agent-facing commands, architecture, invariants, and test conventions                                    |
+| `test/host.test.mjs`                      | native host protocol and lifecycle, driven by a stub launcher                                            |
+| `test/lib.test.mjs`                       | the shared exact-version parser                                                                          |
+| `test/popup.test.mjs`                     | popup rendering with a stubbed DOM and `chrome.*`                                                        |
+| `test/cli.test.mjs`                       | managed install, version switch, lock, and fallback decisions                                            |
+| `test/stubs.mjs`                          | fake installed tree and `npm` stub used by the tests above                                               |
 
 State and host diagnostics live outside the repo in `~/.local/state/dsh-chrome-ext/`
 (`state.json` mode 0600, `host.log`). The dsh console output of each launch goes to
 `$TMPDIR/dsh-chrome-ext/logs` (`/tmp/…` by default), so it survives a host restart but
 not a reboot; override that dir with `DSH_EXT_LOG_DIR`.
+
+## Development
+
+There is no build step: Chrome loads `extension/` directly, and Node runs `native/`
+and `scripts/` as ESM. Node.js 20.11 or newer is required.
+
+```sh
+npm test                                                   # all suites, offline
+node --test test/host.test.mjs                             # one suite
+node --test --test-name-pattern='stop' test/host.test.mjs  # tests whose name matches
+npm run check                                              # Biome format + lint gate
+npm run format                                             # apply formatting
+```
+
+See [AGENTS.md](AGENTS.md) for the cross-file architecture, invariants, and testing
+conventions.
 
 ## Protocol
 
@@ -147,8 +164,9 @@ How a `start` picks the command:
    concurrent launches install once. The lock records the **installer's** pid, not just
    the host's: Chrome kills a host when the popup closes, the detached installer keeps
    writing, and a waiter has to wait for the process that is actually touching the tree.
-   The lock is only stale once both are gone, and a client removes it only if it still
-   holds it. On failure (no npm, offline, install error) the launch falls back to
+   The lock is stale when it is unreadable, older than 15 minutes, or both pids are
+   gone; a client removes it only if it still holds it. On failure (no npm, offline,
+   install error) the launch falls back to
    `npx --yes --prefer-offline @deepseek-ai/dsh@<version>` (`via: "npx"`), so a broken
    install never blocks the launcher.
 4. `DSH_EXT_PACKAGE` pointing at a renamed package always takes the npx path: the bin
@@ -262,8 +280,8 @@ macOS and Windows host registration are not implemented.
   changing versions.
 - `DSH_EXT_PACKAGE` (a fork) and `DSH_EXT_DSH_BIN` bypass the managed install and are
   debug/asymmetry hatches, not supported configurations.
-- `extension/icons/*.png` are derived from `deepseek.svg`; Chrome requires raster icons
-  in the manifest, so re-rasterize if the artwork changes.
+- Chrome requires raster icons in the manifest, so `extension/icons/*.png` are the
+  checked-in artwork; replace those files if the icon changes.
 - **Flatpak/snap Chrome** cannot exec a host on the host system; use the distro package.
   The installer still writes flatpak paths, and that is the case they will not work in.
 - macOS: host manifests go to
