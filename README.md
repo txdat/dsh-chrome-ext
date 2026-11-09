@@ -62,6 +62,19 @@ first, because the managed tree is replaced in place.
 
 `npm run install-cli -- <version>` installs a version from a terminal.
 
+## Peak-hour warning
+
+DeepSeek's API bills a higher rate during peak hours: **01:00-04:00 and
+06:00-10:00 UTC, Monday-Friday**. All other hours, plus Saturday and Sunday,
+are off-peak. While a server is running, the toolbar badge is red during peak
+and green off-peak; hovering it, or opening the popup, names the current rate
+and when it next changes.
+
+The badge flips at the boundary through a `chrome.alarms` alarm, so it stays
+correct while the service worker sleeps and the popup is closed. Chinese public
+holidays are off-peak in DeepSeek's pricing but are not modelled here, so a
+weekday window on a holiday shows as peak (a conservative false positive).
+
 ## Managed CLI install
 
 The host keeps one CLI tree instead of an `npx` cache per spec string. A start

@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { parseVersion } from '../extension/lib.js';
+import { parseVersion, setBadge } from '../extension/lib.js';
 
 test('parseVersion keeps an exact version', () => {
   assert.equal(parseVersion('0.2.2-rc.1'), '0.2.2-rc.1');
@@ -38,5 +38,46 @@ test('parseVersion rejects tags, ranges and option-like input', () => {
     '0.2.2 0.2.3',
   ]) {
     assert.throws(() => parseVersion(input), /not an exact version/, input);
+  }
+});
+
+function fakeChrome() {
+  const calls = { color: null, text: null, title: null };
+  globalThis.chrome = {
+    action: {
+      async setBadgeBackgroundColor({ color }) {
+        calls.color = color;
+      },
+      async setBadgeText({ text }) {
+        calls.text = text;
+      },
+      async setTitle({ title }) {
+        calls.title = title;
+      },
+    },
+  };
+  return calls;
+}
+
+test('setBadge is red in a weekday peak window and green off-peak', async () => {
+  const calls = fakeChrome();
+  try {
+    await setBadge({ running: true }, new Date('2026-11-09T02:00:00Z'));
+    assert.equal(calls.color, '#c62828');
+    assert.equal(calls.text, 'ON');
+    assert.match(calls.title, /Peak hours/);
+
+    await setBadge({ running: true }, new Date('2026-11-09T12:00:00Z'));
+    assert.equal(calls.color, '#1f7a3d');
+    assert.match(calls.title, /Off-peak/);
+
+    await setBadge({ running: true }, new Date('2026-11-07T02:00:00Z'));
+    assert.equal(calls.color, '#1f7a3d', 'a weekend is off-peak');
+
+    await setBadge({ running: false }, new Date('2026-11-09T02:00:00Z'));
+    assert.equal(calls.color, '#8a8f98');
+    assert.equal(calls.text, '');
+  } finally {
+    delete globalThis.chrome;
   }
 });

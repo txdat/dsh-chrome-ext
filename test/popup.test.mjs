@@ -61,7 +61,11 @@ function install({ stored = {}, responses = {} } = {}) {
         },
       },
     },
-    action: { async setBadgeBackgroundColor() {}, async setBadgeText() {} },
+    action: {
+      async setBadgeBackgroundColor() {},
+      async setBadgeText() {},
+      async setTitle() {},
+    },
     tabs: {
       async query() {
         return [];
@@ -139,4 +143,11 @@ test('clicking start names the chosen version while the host works', async () =>
     .map((child) => child.textContent);
   assert.ok(keys.includes('version') && keys.includes('via'), `details name the version and its source: ${keys}`);
   assert.equal(globalThis.createdTab.url, 'http://127.0.0.1:8080/?token=t');
+});
+
+test('the popup states whether DeepSeek is billing peak rates', async () => {
+  const { els } = await openPopup();
+  const peak = els.get('peak');
+  assert.match(peak.textContent, /^(Peak hours|Off-peak): DeepSeek API rates are (higher|lower)/, peak.textContent);
+  assert.match(peak.className, /^peak (peak-now|peak-off)$/, peak.className);
 });
