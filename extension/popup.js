@@ -8,9 +8,11 @@ import {
   rememberSettings,
   setBadge,
 } from './lib.js';
+import { peakLabel } from './peak.js';
 
 const els = {
   status: document.getElementById('status'),
+  peak: document.getElementById('peak'),
   open: document.getElementById('open'),
   stop: document.getElementById('stop'),
   reset: document.getElementById('reset'),
@@ -47,7 +49,14 @@ function startingText(version) {
   return `starting dsh${version ? `@${version}` : ''}…`;
 }
 
+function renderPeak() {
+  const { peak, text } = peakLabel();
+  els.peak.textContent = text;
+  els.peak.className = `peak ${peak ? 'peak-now' : 'peak-off'}`;
+}
+
 function render() {
+  renderPeak();
   const running = state?.running === true;
   const starting = state?.starting === true;
   els.status.textContent = running

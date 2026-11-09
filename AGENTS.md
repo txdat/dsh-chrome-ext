@@ -48,7 +48,8 @@ Node.js 20.11+ is required (`import.meta.dirname`, built-in `node:test`).
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `extension/popup.js`       | Owns the lifecycle: status → start/stop → open tab. Persists `state` and the `version` setting in `chrome.storage.local`.               |
 | `extension/lib.js`         | Host RPC, storage/tab helpers, and `parseVersion`. Imported by the popup **and** `native/host.mjs`; keep it browser-safe and Node-safe. |
-| `extension/background.js`  | Badge sync only (`ON` while running). The popup, not the service worker, owns the lifecycle.                                            |
+| `extension/background.js`  | Badge sync (`ON`, red at peak, green off-peak) and the peak-boundary alarm. The popup, not the service worker, owns the lifecycle.      |
+| `extension/peak.js`        | DeepSeek peak windows: 01:00-04:00 and 06:00-10:00 UTC on weekdays. `isPeak`, the next flip the badge alarm schedules, and popup copy.  |
 | `extension/manifest.json`  | MV3 manifest. Its `key` pins the extension ID that the native host manifest must allow.                                                 |
 | `native/host.sh`           | The executable Chrome launches. Resolves node/npm/npx, then `exec`s `host.mjs`.                                                         |
 | `native/host.mjs`          | Framed protocol, launch/resume/reuse/stop state machine, process ownership, state file.                                                 |

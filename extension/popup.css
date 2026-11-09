@@ -71,6 +71,26 @@ h1 {
   color: var(--muted);
 }
 
+.peak {
+  margin: -0.5rem 0 0.75rem;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.peak.peak-now {
+  color: var(--danger-fg);
+}
+
+.peak.peak-off {
+  color: #1f7a3d;
+}
+
+@media (prefers-color-scheme: dark) {
+  .peak.peak-off {
+    color: #6cc98b;
+  }
+}
+
 .status.running {
   color: #1f7a3d;
 }

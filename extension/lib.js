@@ -1,5 +1,11 @@
+import { peakLabel } from './peak.js';
+
 /** Name of the native host; must match native/com.txdat.dsh_web.json and the file name. */
 export const HOST_NAME = 'com.txdat.dsh_web';
+
+const BADGE_PEAK = '#c62828';
+const BADGE_RUNNING = '#1f7a3d';
+const BADGE_IDLE = '#8a8f98';
 
 /**
  * An exact CLI version, the only spec that keeps npx on one cache entry: ranges
@@ -69,10 +75,13 @@ export async function recallSettings() {
   return settings ?? null;
 }
 
-export async function setBadge(state) {
+export async function setBadge(state, now = new Date()) {
   const running = state?.running === true;
-  await chrome.action.setBadgeBackgroundColor({ color: running ? '#1f7a3d' : '#8a8f98' });
+  const { peak, text } = peakLabel(now);
+  const color = running ? (peak ? BADGE_PEAK : BADGE_RUNNING) : BADGE_IDLE;
+  await chrome.action.setBadgeBackgroundColor({ color });
   await chrome.action.setBadgeText({ text: running ? 'ON' : '' });
+  await chrome.action.setTitle({ title: `DSH Web · ${text}` });
 }
 
 /** Open the dsh web UI as a tab in this Chrome window. */
