@@ -84,7 +84,7 @@ uses, in order:
 2. The managed tree, if it already has the requested version (`via: "cli"`).
 3. `npm install --prefix <cli dir>` with an exact dependency, under a lock, then
    run the tree (`via: "cli"`). Concurrent launches install once.
-4. On install failure, `npx --yes --prefer-offline @deepseek-ai/dsh@<version>`
+4. On install failure, `npx --yes @deepseek-ai/dsh@<version>`
    (`via: "npx"`), so a broken install does not block the launcher.
 
 Old `npx` trees under `~/.npm/_npx` are safe to delete (`rm -rf ~/.npm/_npx`);

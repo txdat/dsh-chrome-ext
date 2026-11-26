@@ -116,7 +116,7 @@ slow install or a popup that closed mid-launch does not race a second server int
   `--prefix <cli dir>`. The lock records the **installer** pid as well as the
   host pid so a waiter keeps waiting after Chrome kills the host; a client removes
   the lock only if it still holds it. Install failure falls back to
-  `npx --yes --prefer-offline @deepseek-ai/dsh@<version>`.
+  `npx --yes @deepseek-ai/dsh@<version>`.
 - **`extension/` is browser-only.** No `node:` imports and no bundler; keep
   relative ESM imports. `lib.js` is also imported by Node, so it may only touch
   `chrome.*` inside function bodies.

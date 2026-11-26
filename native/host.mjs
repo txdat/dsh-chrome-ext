@@ -61,6 +61,9 @@ const HOST_LOG = path.join(STATE_DIR, 'host.log');
 const NODE_BIN = process.env.DSH_EXT_NODE ?? process.execPath;
 const NPX_BIN = process.env.DSH_EXT_NPX ?? path.join(path.dirname(NODE_BIN), 'npx');
 const NPM_BIN = process.env.DSH_EXT_NPM ?? path.join(path.dirname(NODE_BIN), 'npm');
+// npm, npx, and dsh are `#!/usr/bin/env node` scripts, and Chrome starts the host
+// without a version manager's PATH, so every child gets node's directory first.
+const CHILD_PATH = `${path.dirname(NODE_BIN)}:${process.env.PATH ?? ''}`;
 const PACKAGE = process.env.DSH_EXT_PACKAGE ?? DEFAULT_PACKAGE;
 /**
  * Pinned CLI version, installed once into CLI_DIR and then run as a binary.
@@ -297,6 +300,7 @@ async function start({ workspace, port, version } = {}) {
         version: pinned,
         dir: CLI_DIR,
         npm: NPM_BIN,
+        env: { ...process.env, PATH: CHILD_PATH },
         logFile: INSTALL_LOG,
         timeoutMs: INSTALL_TIMEOUT_MS,
         pkg: PACKAGE,
@@ -308,7 +312,7 @@ async function start({ workspace, port, version } = {}) {
     ? JSON.parse(process.env.DSH_EXT_LAUNCH_ARGS ?? '[]')
     : cli.bin
       ? ['web', '--no-open', '--port', String(targetPort)]
-      : ['--yes', '--prefer-offline', spec, 'web', '--no-open', '--port', String(targetPort)];
+      : ['--yes', spec, 'web', '--no-open', '--port', String(targetPort)];
   const via = cli.via ?? 'npx';
   const cwd = workspace && existsSync(workspace) ? workspace : os.homedir();
   const launchId = randomUUID();
@@ -320,8 +324,7 @@ async function start({ workspace, port, version } = {}) {
       cwd,
       env: {
         ...process.env,
-        // node must be reachable for the npx shebang, whatever Chrome's PATH was
-        PATH: `${path.dirname(NODE_BIN)}:${process.env.PATH ?? ''}`,
+        PATH: CHILD_PATH,
         [LAUNCH_ID_VAR]: launchId,
       },
       stdio: ['ignore', logFd, logFd],

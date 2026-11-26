@@ -70,7 +70,7 @@ test('a missing or stale tree is installed in place at the exact version', async
 
   assert.equal(result.via, 'cli');
   assert.equal(installedVersion(cli), '1.2.3', 'the tree was replaced, not duplicated');
-  assert.deepEqual(installArgs(dir), ['install', '--prefix', cli, '--no-audit', '--no-fund', '--prefer-offline']);
+  assert.deepEqual(installArgs(dir), ['install', '--prefix', cli, '--no-audit', '--no-fund']);
   assert.deepEqual(manifestOf(dir).dependencies, { [DEFAULT_PACKAGE]: '1.2.3' }, 'an exact dependency, never a range');
 });
 
@@ -122,7 +122,7 @@ test('concurrent launches install once', async () => {
     ['cli', 'cli'],
   );
   const log = readFileSync(path.join(dir, 'install-argv.txt'), 'utf8');
-  assert.equal(log.trim().split('\n').length, 6, 'npm ran exactly once');
+  assert.equal(log.trim().split('\n').length, 5, 'npm ran exactly once (one argv of five lines)');
 });
 
 test('DSH_EXT_DSH_BIN wins over the managed tree', async () => {

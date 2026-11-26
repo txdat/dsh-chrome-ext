@@ -104,7 +104,11 @@ async function acquireLock(lockFile, { timeoutMs, log }) {
   return false;
 }
 
-/** Exact dependency, never a range: `npm install` here must not resolve anything. */
+/**
+ * Exact dependency, never a range: `npm install` here must not resolve anything.
+ * No `--prefer-offline`: npm would trust a cached packument older than the
+ * requested version and fail with ETARGET instead of refetching it.
+ */
 function manifest(version, pkg) {
   return `${JSON.stringify({ name: 'dsh-chrome-ext-cli', private: true, dependencies: { [pkg]: version } }, null, 2)}\n`;
 }
@@ -115,7 +119,7 @@ async function runInstall({ dir, npm, version, pkg, env, logFile, timeoutMs, onS
   const fd = openSync(logFile, 'a', 0o600);
   try {
     return await new Promise((resolve) => {
-      const child = spawn(npm, ['install', '--prefix', dir, '--no-audit', '--no-fund', '--prefer-offline'], {
+      const child = spawn(npm, ['install', '--prefix', dir, '--no-audit', '--no-fund'], {
         env,
         stdio: ['ignore', fd, fd],
         // Detached so the install completes even if Chrome kills this host.
