@@ -351,13 +351,14 @@ test('npx is asked for an exact CLI version so the cached install is reused', as
   try {
     assert.equal(first.reply.ok, true);
     const argv = readArgv(argvFile);
-    assert.deepEqual(argv.slice(0, 2), ['--yes', '--prefer-offline'], 'non-interactive and cache-first');
+    assert.equal(argv[0], '--yes', 'non-interactive');
+    assert.equal(argv.includes('--prefer-offline'), false, 'a stale packument cache must not hide a new version');
     assert.match(
-      argv[2],
+      argv[1],
       /^@deepseek-ai\/dsh@\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/,
       'the package spec must pin an exact version, not a dist-tag (`latest`) or a range',
     );
-    assert.deepEqual(argv.slice(3), ['web', '--no-open', '--port', '3080']);
+    assert.deepEqual(argv.slice(2), ['web', '--no-open', '--port', '3080']);
 
     // A different spec would hash to a different npx cache dir and re-download.
     await request(hostArgv, { type: 'stop' }, environment);
@@ -383,8 +384,8 @@ test('DSH_EXT_DSH_VERSION and DSH_EXT_PACKAGE override the pin', async () => {
   try {
     assert.equal(reply.ok, true);
     assert.deepEqual(readArgv(argvFile).slice(0, 1), ['--yes']);
-    assert.equal(readArgv(argvFile)[2], '@example/dsh@0.0.0-test.1');
-    assert.deepEqual(readArgv(argvFile).slice(3), ['web', '--no-open', '--port', '3099']);
+    assert.equal(readArgv(argvFile)[1], '@example/dsh@0.0.0-test.1');
+    assert.deepEqual(readArgv(argvFile).slice(2), ['web', '--no-open', '--port', '3099']);
   } finally {
     killGroup(reply.pid);
   }
@@ -396,7 +397,7 @@ test('a version chosen in the popup replaces the built-in pin', async () => {
   const { reply } = await request(hostArgv, { type: 'start', version: '0.1.7-rc.2' }, npxEnv(dir, npx));
   try {
     assert.equal(reply.ok, true);
-    assert.equal(readArgv(argvFile)[2], '@deepseek-ai/dsh@0.1.7-rc.2');
+    assert.equal(readArgv(argvFile)[1], '@deepseek-ai/dsh@0.1.7-rc.2');
     assert.equal(reply.package, '@deepseek-ai/dsh@0.1.7-rc.2', 'the reply names the spec that is running');
     assert.equal(stateOf(dir).package, '@deepseek-ai/dsh@0.1.7-rc.2', 'the state records it too');
   } finally {
@@ -410,7 +411,7 @@ test('an empty version falls back to the built-in pin', async () => {
   const { reply } = await request(hostArgv, { type: 'start', version: '   ' }, npxEnv(dir, npx));
   try {
     assert.equal(reply.ok, true);
-    assert.equal(readArgv(argvFile)[2], reply.package);
+    assert.equal(readArgv(argvFile)[1], reply.package);
     assert.match(reply.package, /^@deepseek-ai\/dsh@\d+\.\d+\.\d+/);
   } finally {
     killGroup(reply.pid);
@@ -469,7 +470,25 @@ test('a missing version is installed once, then launched from disk', async () =>
   }
 });
 
-test('a failed install falls back to npx with --prefer-offline', async () => {
+test('the installer finds node even when Chrome started the host without it on PATH', async () => {
+  const dir = tempDir();
+  const launcher = stub(dir, { name: 'ok.mjs' });
+  const { file: npm } = stubInstaller(dir); // runs `node -p`, like npm's `#!/usr/bin/env node`
+
+  const { reply } = await request(
+    hostArgv,
+    { type: 'start' },
+    cliEnv(dir, launcher, { DSH_EXT_NPM: npm, DSH_EXT_NODE: process.execPath, PATH: '/usr/bin:/bin' }),
+  );
+  try {
+    assert.equal(reply.ok, true, reply.error);
+    assert.equal(reply.via, 'cli', 'the install ran instead of falling back to npx');
+  } finally {
+    killGroup(reply.pid);
+  }
+});
+
+test('a failed install falls back to npx', async () => {
   const dir = tempDir();
   const { file: npx, argvFile } = stubNpx(dir, stub(dir, { name: 'ok.mjs' }));
 
@@ -481,8 +500,7 @@ test('a failed install falls back to npx with --prefer-offline', async () => {
   try {
     assert.equal(reply.ok, true);
     assert.equal(reply.via, 'npx');
-    assert.equal(readArgv(argvFile)[1], '--prefer-offline', 'the fallback skips registry revalidation');
-    assert.match(readArgv(argvFile)[2], /^@deepseek-ai\/dsh@\d+\.\d+\.\d+/);
+    assert.match(readArgv(argvFile)[1], /^@deepseek-ai\/dsh@\d+\.\d+\.\d+/);
   } finally {
     killGroup(reply.pid);
   }
@@ -513,7 +531,7 @@ test('an already versioned DSH_EXT_PACKAGE is not pinned twice', async () => {
   );
   try {
     assert.equal(reply.ok, true);
-    assert.equal(readArgv(argvFile)[2], '@deepseek-ai/dsh@0.1.7-rc.2');
+    assert.equal(readArgv(argvFile)[1], '@deepseek-ai/dsh@0.1.7-rc.2');
   } finally {
     killGroup(reply.pid);
   }
